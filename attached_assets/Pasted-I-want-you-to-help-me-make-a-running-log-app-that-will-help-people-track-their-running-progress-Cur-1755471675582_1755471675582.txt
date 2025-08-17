@@ -1,0 +1,22 @@
+I want you to help me make a running log app that will help people track their running progress
+
+Current ideas (write out your current idea for how the app should looks / what features it has)
+The bottom have bar will have 3 icons/buttons: Home for the home page, Journey for the calendar of historical activities on a month-by-month breakdown, and Log Activity to add events
+
+Here is what I want on the home page:
+
+the home page to have a time series line chart that shows how many miles they have run each week (weekly mileage) on the Y-axis and dates of each week on the X-axis (this should go from Monday to Sunday- so monday is the start of each week on the platform for all week-oriented calculations) it should show progress from the past 6 weeks. 
+
+Here is what I want on the Journey page:
+It should say Miles this month:xx.xx
+Under that can be a calendar that has the type of the run that the user did each day of the month 
+
+
+Here is what I want on the Log Activity page (the plus icon):
+ Under that i want a place to input the person's run. They can put the distance, pace, and time of the run (be sure these are super modern and responsive for ios users - think of including an aesthetic scroll wheel design on some of them where it makes sense) and the user can also input the “Highlight of run” Or if anything is aching then they can put that. (basically this will be a paragraph entry free response box that the user can fill out - but it’s supposed to guide them to inputting meaningful information without it feeling burdensome, so the questions should be fun like “what was the highlight of today’s run” etc.) I also want the user to be able to choose the type of run from the following : easy run, trail run, long run, tempo, threshold, workout, race. 
+
+At the bottom of the page should be a rounded rectangular sky blue button that says log
+
+ 
+Design 
+I want the design to be mainly ivory (an inviting yet aesthetic UI / UX background) with sky blue accents / features. Below is a screenshot of a rough example of how it should look
