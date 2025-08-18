@@ -21,6 +21,12 @@ const formSchema = insertRunSchema.extend({
   timeHours: z.string(),
   timeMinutes: z.string().min(1, "Time minutes required"),
   customRunType: z.string().optional(),
+  date: z.string().refine((date) => {
+    const selectedDate = new Date(date);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    return selectedDate <= today;
+  }, "Cannot log runs for future dates"),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -30,8 +36,19 @@ export default function LogActivity() {
   const [customRunType, setCustomRunType] = useState<string>("");
   const [paceMinutes, setPaceMinutes] = useState<number>(8);
   const [paceSeconds, setPaceSeconds] = useState<number>(45);
+  const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [editingRunId, setEditingRunId] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // Get run ID from URL search params
+  const editRunId = new URLSearchParams(window.location.search).get('edit');
+  
+  // Fetch run data if editing
+  const { data: editingRun, isLoading: loadingRun } = useQuery<any>({
+    queryKey: ['/api/runs', editRunId],
+    enabled: !!editRunId,
+  });
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -48,24 +65,51 @@ export default function LogActivity() {
     },
   });
 
-  const createRunMutation = useMutation({
+  // Set up editing state when run data loads
+  useEffect(() => {
+    if (editRunId && editingRun) {
+      setIsEditing(true);
+      setEditingRunId(editRunId);
+      setSelectedRunType(editingRun.runType);
+      setPaceMinutes(editingRun.paceMinutes);
+      setPaceSeconds(editingRun.paceSeconds);
+      
+      form.reset({
+        distance: editingRun.distance,
+        paceMinutes: editingRun.paceMinutes,
+        paceSeconds: editingRun.paceSeconds,
+        timeHours: editingRun.timeHours.toString(),
+        timeMinutes: editingRun.timeMinutes.toString(),
+        runType: editingRun.runType,
+        notes: editingRun.notes || "",
+        date: editingRun.date,
+        customRunType: "",
+      });
+    }
+  }, [editRunId, editingRun, form]);
+
+  const saveRunMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await apiRequest('POST', '/api/runs', data);
+      const url = isEditing ? `/api/runs/${editingRunId}` : '/api/runs';
+      const method = isEditing ? 'PUT' : 'POST';
+      const response = await apiRequest(method, url, data);
       return response.json();
     },
     onSuccess: () => {
       toast({
-        title: "Run logged successfully!",
-        description: "Your run has been saved to your training log.",
+        title: isEditing ? "Run updated successfully!" : "Run logged successfully!",
+        description: isEditing ? "Your run has been updated." : "Your run has been saved to your training log.",
       });
-      form.reset();
+      if (!isEditing) {
+        form.reset();
+      }
       queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
       queryClient.invalidateQueries({ queryKey: ['/api/runs/month'] });
     },
-    onError: () => {
+    onError: (error: any) => {
       toast({
-        title: "Error logging run",
-        description: "Please try again.",
+        title: isEditing ? "Error updating run" : "Error logging run",
+        description: error?.message || "Please try again.",
         variant: "destructive",
       });
     },
@@ -83,7 +127,7 @@ export default function LogActivity() {
       notes: data.notes,
       date: data.date,
     };
-    createRunMutation.mutate(submitData);
+    saveRunMutation.mutate(submitData);
   };
 
   const handleSave = () => {
@@ -308,10 +352,10 @@ export default function LogActivity() {
           <Button
             type="submit"
             className="w-full bg-skyblue text-white py-4 rounded-2xl font-semibold text-lg shadow-lg active:scale-95 transition-all duration-200 hover:bg-skyblue-dark"
-            disabled={createRunMutation.isPending}
+            disabled={saveRunMutation.isPending}
             data-testid="button-log-run"
           >
-            {createRunMutation.isPending ? 'Logging...' : 'Log Run'}
+            {saveRunMutation.isPending ? (isEditing ? 'Updating...' : 'Logging...') : (isEditing ? 'Update Run' : 'Log Run')}
           </Button>
         </form>
       </Form>

@@ -11,6 +11,8 @@ export interface IStorage {
   getRunsByUserId(userId: string): Promise<Run[]>;
   getRunsByUserIdAndDateRange(userId: string, startDate: string, endDate: string): Promise<Run[]>;
   getRunsByUserIdAndMonth(userId: string, year: number, month: number): Promise<Run[]>;
+  getRunById(id: string, userId: string): Promise<Run | undefined>;
+  updateRun(id: string, run: InsertRun, userId: string): Promise<Run | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -71,6 +73,30 @@ export class MemStorage implements IStorage {
       const runDate = new Date(run.date);
       return runDate.getFullYear() === year && runDate.getMonth() === month - 1;
     });
+  }
+
+  async getRunById(id: string, userId: string): Promise<Run | undefined> {
+    const run = this.runs.get(id);
+    return run && run.userId === userId ? run : undefined;
+  }
+
+  async updateRun(id: string, insertRun: InsertRun, userId: string): Promise<Run | undefined> {
+    const existingRun = this.runs.get(id);
+    if (!existingRun || existingRun.userId !== userId) {
+      return undefined;
+    }
+    
+    const updatedRun: Run = {
+      ...existingRun,
+      ...insertRun,
+      id,
+      userId,
+      timeHours: insertRun.timeHours || 0,
+      notes: insertRun.notes || null,
+    };
+    
+    this.runs.set(id, updatedRun);
+    return updatedRun;
   }
 }
 

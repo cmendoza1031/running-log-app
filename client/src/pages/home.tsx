@@ -63,12 +63,26 @@ export default function Home() {
 
   const navigateMonth = (direction: 'prev' | 'next') => {
     const newDate = new Date(currentDate);
+    const today = new Date();
+    
     if (direction === 'prev') {
       newDate.setMonth(newDate.getMonth() - 1);
+      setCurrentDate(newDate);
     } else {
+      // Only allow going forward if not already in current month
       newDate.setMonth(newDate.getMonth() + 1);
+      if (newDate.getFullYear() < today.getFullYear() || 
+          (newDate.getFullYear() === today.getFullYear() && newDate.getMonth() <= today.getMonth())) {
+        setCurrentDate(newDate);
+      }
     }
-    setCurrentDate(newDate);
+  };
+
+  // Check if we can navigate forward (not in current month)
+  const canNavigateForward = () => {
+    const today = new Date();
+    return currentYear < today.getFullYear() || 
+           (currentYear === today.getFullYear() && currentMonth < today.getMonth() + 1);
   };
 
   const handleWeekClick = (weekIndex: number, weekLabel: string, miles: number, time?: number) => {
@@ -134,8 +148,9 @@ export default function Home() {
             {monthNames[currentMonth - 1]} {currentYear}
           </h3>
           <button 
-            className="p-2 text-skyblue"
-            onClick={() => navigateMonth('next')}
+            className={`p-2 ${canNavigateForward() ? 'text-skyblue' : 'text-gray-300 cursor-not-allowed'}`}
+            onClick={() => canNavigateForward() && navigateMonth('next')}
+            disabled={!canNavigateForward()}
             data-testid="button-next-month"
           >
             <ChevronRight size={20} />

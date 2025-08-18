@@ -71,7 +71,7 @@ export default function WeekDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm mx-auto bg-ivory rounded-2xl">
+      <DialogContent className="max-w-sm mx-auto bg-ivory rounded-2xl" aria-describedby="week-details">
         <DialogHeader className="flex flex-row items-center justify-between">
           <div>
             <DialogTitle className="text-xl font-semibold text-gray-800">
