@@ -9,11 +9,12 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import ScrollWheel from "@/components/scroll-wheel";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { insertRunSchema } from "@shared/schema";
+import { IOSFeedbackManager, IOSButtonInteractions, isNative } from "@/lib/ios-utils";
 
 const formSchema = insertRunSchema.extend({
   distance: z.string().min(1, "Distance is required"),
@@ -108,7 +109,10 @@ export default function LogActivity() {
       const response = await apiRequest(method, url, data);
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Trigger success haptic feedback
+      await IOSFeedbackManager.successNotification();
+      
       toast({
         title: isEditing ? "Run updated successfully!" : "Run logged successfully!",
         description: isEditing ? "Your run has been updated." : "Your run has been saved to your training log.",
@@ -119,7 +123,10 @@ export default function LogActivity() {
       queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
       queryClient.invalidateQueries({ queryKey: ['/api/runs/month'] });
     },
-    onError: (error: any) => {
+    onError: async (error: any) => {
+      // Trigger error haptic feedback
+      await IOSFeedbackManager.errorNotification();
+      
       toast({
         title: isEditing ? "Error updating run" : "Error logging run",
         description: error?.message || "Please try again.",
@@ -131,7 +138,7 @@ export default function LogActivity() {
   const onSubmit = (data: FormData) => {
     const finalRunType = selectedRunType === "other" ? customRunType : selectedRunType;
     const submitData = {
-      distance: data.distance,
+      distance: parseFloat(data.distance),
       paceMinutes: paceMinutes,
       paceSeconds: paceSeconds,
       timeHours: timeHours,
@@ -169,7 +176,10 @@ export default function LogActivity() {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    // Trigger medium haptic feedback for save action
+    await IOSFeedbackManager.mediumImpact();
+    
     toast({
       title: "Progress saved",
       description: "Your current form data has been saved.",
@@ -265,7 +275,9 @@ export default function LogActivity() {
                 <button
                   key={type.value}
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
+                    // Trigger light haptic feedback for selection
+                    await IOSFeedbackManager.lightImpact();
                     setSelectedRunType(type.value);
                     invalidateRunsCache();
                   }}
@@ -345,9 +357,12 @@ export default function LogActivity() {
 
       {/* Pace Popup Modal */}
       <Dialog open={showPacePopup} onOpenChange={setShowPacePopup}>
-        <DialogContent className="max-w-sm mx-auto bg-ivory rounded-2xl" aria-describedby="pace-selector">
+        <DialogContent className="max-w-sm mx-auto bg-ivory rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold text-gray-800 text-center">Set Pace</DialogTitle>
+            <DialogDescription className="text-center text-gray-600">
+              Select your running pace per mile using the scroll wheels below.
+            </DialogDescription>
           </DialogHeader>
           <div className="flex items-center justify-center space-x-4 py-4">
             <div className="flex flex-col items-center">
@@ -395,9 +410,12 @@ export default function LogActivity() {
 
       {/* Time Popup Modal */}
       <Dialog open={showTimePopup} onOpenChange={setShowTimePopup}>
-        <DialogContent className="max-w-sm mx-auto bg-ivory rounded-2xl" aria-describedby="time-selector">
+        <DialogContent className="max-w-sm mx-auto bg-ivory rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold text-gray-800 text-center">Set Total Time</DialogTitle>
+            <DialogDescription className="text-center text-gray-600">
+              Set the total duration of your run using the scroll wheels below.
+            </DialogDescription>
           </DialogHeader>
           <div className="flex items-center justify-center space-x-4 py-4">
             <div className="flex flex-col items-center">

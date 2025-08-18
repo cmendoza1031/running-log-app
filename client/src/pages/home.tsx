@@ -103,7 +103,7 @@ export default function Home() {
 
   const handleAddRun = () => {
     setShowWeekDetail(false);
-    setLocation('/log-activity');
+    setLocation('/log');
   };
 
   const closeWeekDetail = () => {

@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import type { Run } from "@shared/schema";
 
 interface RunDayPopupProps {
@@ -40,11 +40,14 @@ export default function RunDayPopup({ runs, date, isOpen, onClose, onRunClick }:
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm mx-auto bg-ivory rounded-2xl" aria-describedby="day-runs">
+      <DialogContent className="max-w-sm mx-auto bg-ivory rounded-2xl">
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold text-gray-800">
             {formatDate(date)}
           </DialogTitle>
+          <DialogDescription className="text-center text-gray-600">
+            Your runs for this day. Tap a run to view details.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">

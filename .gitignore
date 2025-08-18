@@ -4,3 +4,4 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+APP_STORE_GUIDE.md

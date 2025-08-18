@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Pencil, X } from "lucide-react";
 import type { Run } from "@shared/schema";
@@ -43,9 +43,14 @@ export default function RunDetailModal({ run, isOpen, onClose, onEdit }: RunDeta
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm mx-auto bg-ivory rounded-2xl" aria-describedby="run-details">
+      <DialogContent className="max-w-sm mx-auto bg-ivory rounded-2xl">
         <DialogHeader className="flex flex-row items-center justify-between">
-          <DialogTitle className="text-xl font-semibold text-gray-800">Run Details</DialogTitle>
+          <div>
+            <DialogTitle className="text-xl font-semibold text-gray-800">Run Details</DialogTitle>
+            <DialogDescription className="text-sm text-gray-600">
+              View and edit your run information below.
+            </DialogDescription>
+          </div>
           <Button
             onClick={() => onEdit(run)}
             className="bg-skyblue text-white px-3 py-1 rounded-lg text-sm hover:bg-skyblue-dark"

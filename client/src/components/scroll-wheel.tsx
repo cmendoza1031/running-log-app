@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { IOSFeedbackManager, IOSPerformanceManager, isNative } from '@/lib/ios-utils';
 
 interface ScrollWheelProps {
   value: number;
@@ -22,10 +23,16 @@ export default function ScrollWheel({ value, onChange, min, max, className = "",
     if (containerRef.current) {
       const scrollTop = selectedIndex * itemHeight;
       containerRef.current.scrollTop = scrollTop;
+      
+      // Apply iOS performance optimizations if running on native platform
+      if (isNative()) {
+        IOSPerformanceManager.optimizeScrolling(containerRef.current);
+        IOSPerformanceManager.optimizeAnimations(containerRef.current);
+      }
     }
   }, [value, selectedIndex]);
 
-  const handleScroll = () => {
+  const handleScroll = async () => {
     if (!containerRef.current || isDragging) return;
     
     const scrollTop = containerRef.current.scrollTop;
@@ -33,11 +40,15 @@ export default function ScrollWheel({ value, onChange, min, max, className = "",
     const newValue = items[newIndex];
     
     if (newValue !== value && newValue >= min && newValue <= max) {
+      // Trigger light haptic feedback for smooth scrolling on iOS
+      await IOSFeedbackManager.lightImpact();
       onChange(newValue);
     }
   };
 
-  const handleItemClick = (clickedValue: number) => {
+  const handleItemClick = async (clickedValue: number) => {
+    // Trigger medium haptic feedback for direct selection on iOS
+    await IOSFeedbackManager.mediumImpact();
     onChange(clickedValue);
   };
 
@@ -48,6 +59,7 @@ export default function ScrollWheel({ value, onChange, min, max, className = "",
       style={{ height: `${visibleItems * itemHeight}px` }}
       onScroll={handleScroll}
       data-testid={dataTestId}
+      data-scroll-container
     >
       {/* Top fade */}
       <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-white to-transparent z-10 pointer-events-none" />

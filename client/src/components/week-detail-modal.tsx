@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import type { Run } from "@shared/schema";
@@ -71,15 +71,15 @@ export default function WeekDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm mx-auto bg-ivory rounded-2xl" aria-describedby="week-details">
+      <DialogContent className="max-w-sm mx-auto bg-ivory rounded-2xl">
         <DialogHeader className="flex flex-row items-center justify-between">
           <div>
             <DialogTitle className="text-xl font-semibold text-gray-800">
               Week of {weekLabel}
             </DialogTitle>
-            <div className="text-sm text-gray-600 mt-1">
+            <DialogDescription className="text-sm text-gray-600 mt-1">
               {weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {weekEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </div>
+            </DialogDescription>
           </div>
           <Button
             onClick={onAddRun}

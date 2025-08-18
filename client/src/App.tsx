@@ -8,6 +8,8 @@ import Home from "@/pages/home";
 import Journey from "@/pages/journey";
 import LogActivity from "@/pages/log-activity";
 import BottomNavigation from "@/components/bottom-navigation";
+import { useEffect } from "react";
+import { IOSAppManager, IOSPerformanceManager, isNative } from "./lib/ios-utils";
 
 function Router() {
   return (
@@ -26,6 +28,27 @@ function Router() {
 }
 
 function App() {
+  useEffect(() => {
+    // Initialize iOS-specific features when running on native platform
+    const initializeApp = async () => {
+      if (isNative()) {
+        console.log('Initializing iOS native features...');
+        await IOSAppManager.initialize();
+        
+        // Optimize app performance for iOS
+        IOSPerformanceManager.preventZoom();
+        
+        // Optimize scrolling for all scroll containers
+        const scrollContainers = document.querySelectorAll('[data-scroll-container]');
+        scrollContainers.forEach((container) => {
+          IOSPerformanceManager.optimizeScrolling(container as HTMLElement);
+        });
+      }
+    };
+
+    initializeApp();
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
