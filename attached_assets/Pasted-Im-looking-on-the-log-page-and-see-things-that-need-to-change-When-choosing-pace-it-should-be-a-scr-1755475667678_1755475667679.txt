@@ -1,0 +1,15 @@
+Im looking on the log page and see things that need to change:
+When choosing pace it should be a scroll wheel showing 5 numbers at a time (2 numbers above the selected number and 2 numbers below faded out) and having to scroll down to see the rest. Go from 0-59 for the seconds slot and change the minute slot to 4-15 minutes per mile
+After changing the value in each section in the log page there needs to be a save button separate from the log button.
+
+
+Remove this fluff you added at teh top - these place holders are NOT needed - the ios device will have the necessary stuff here automatic (91 and other stuff to the right are not needed). This will help clean up header space and move content up
+
+
+The home history page should INCLUDE the current week in the time series line chart. ALSO, have it show weeks in the current month (instead of 6 weeks in total) and have an aesthetic back button icone in the top left of the line chart component that will let the user go back to see line charts from previous months 
+
+
+In the Journey page, the user should be able to click each date and see a popup that contains summary cards (with their corresponding colors that you outlined below in the Run Types legend) of each entry. And when they click on the entry, it should take them to a page that containts the entire items as shown on the “log” page - so they can see everything again. Also, for this specific type of card, have a sky blue “Edit” button on the top right corner where they can edit details .again, wherever they edit, have a sky blue “save” button so they know their changes are registered in our system / database. 
+
+On the journey and log page remove workout and instead have a box to where if a person did a different type of run they could input it. Instead of workout put other (i should be able to type in other)  
+On the home page when I tap on a dot on the line chart we should also have total hours/inutes below the total miles(formatted Xhr Xmin). Also add total hours/minutes number next to the large xx.x mi number above the line chart

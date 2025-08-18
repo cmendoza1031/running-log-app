@@ -4,9 +4,10 @@ interface MonthlyCalendarProps {
   year: number;
   month: number;
   runs: Run[];
+  onDayClick: (date: string, runs: Run[]) => void;
 }
 
-export default function MonthlyCalendar({ year, month, runs }: MonthlyCalendarProps) {
+export default function MonthlyCalendar({ year, month, runs, onDayClick }: MonthlyCalendarProps) {
   const daysInMonth = new Date(year, month, 0).getDate();
   const firstDayOfMonth = new Date(year, month - 1, 1).getDay();
   const adjustedFirstDay = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1; // Monday = 0
@@ -30,13 +31,15 @@ export default function MonthlyCalendar({ year, month, runs }: MonthlyCalendarPr
     const dayRuns = runsByDate[day] || [];
     const hasRun = dayRuns.length > 0;
     const runType = hasRun ? dayRuns[0].runType : null;
+    const dateString = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
 
     return (
       <div
         key={day}
-        className={`calendar-day h-10 flex items-center justify-center text-sm rounded-lg ${
-          hasRun ? getRunTypeClass(runType!) : ''
+        className={`calendar-day h-10 flex items-center justify-center text-sm rounded-lg cursor-pointer ${
+          hasRun ? getRunTypeClass(runType!) : 'hover:bg-gray-50'
         }`}
+        onClick={() => hasRun && onDayClick(dateString, dayRuns)}
         data-testid={`calendar-day-${day}`}
       >
         <span className={hasRun ? 'text-gray-600' : 'text-gray-400'}>

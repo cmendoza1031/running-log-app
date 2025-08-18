@@ -1,11 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { useLocation } from "wouter";
 import MonthlyCalendar from "@/components/monthly-calendar";
+import RunDayPopup from "@/components/run-day-popup";
+import RunDetailModal from "@/components/run-detail-modal";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Run } from "@shared/schema";
 
 export default function Journey() {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [selectedRuns, setSelectedRuns] = useState<Run[]>([]);
+  const [showDayPopup, setShowDayPopup] = useState(false);
+  const [selectedRun, setSelectedRun] = useState<Run | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [, setLocation] = useLocation();
+  
   const currentMonth = currentDate.getMonth() + 1;
   const currentYear = currentDate.getFullYear();
 
@@ -28,6 +38,34 @@ export default function Journey() {
       newDate.setMonth(newDate.getMonth() + 1);
     }
     setCurrentDate(newDate);
+  };
+
+  const handleDayClick = (date: string, runs: Run[]) => {
+    setSelectedDate(date);
+    setSelectedRuns(runs);
+    setShowDayPopup(true);
+  };
+
+  const handleRunClick = (run: Run) => {
+    setShowDayPopup(false);
+    setSelectedRun(run);
+    setShowDetailModal(true);
+  };
+
+  const handleEditRun = (run: Run) => {
+    setShowDetailModal(false);
+    setLocation(`/log-activity?edit=${run.id}`);
+  };
+
+  const closeDayPopup = () => {
+    setShowDayPopup(false);
+    setSelectedDate("");
+    setSelectedRuns([]);
+  };
+
+  const closeDetailModal = () => {
+    setShowDetailModal(false);
+    setSelectedRun(null);
   };
 
   if (isLoading) {
@@ -89,6 +127,7 @@ export default function Journey() {
           year={currentYear} 
           month={currentMonth} 
           runs={runs || []} 
+          onDayClick={handleDayClick}
         />
       </div>
 
@@ -121,15 +160,31 @@ export default function Journey() {
             <span>Threshold</span>
           </div>
           <div className="flex items-center">
-            <div className="w-3 h-3 rounded-full run-type-workout mr-2"></div>
-            <span>Workout</span>
-          </div>
-          <div className="flex items-center">
             <div className="w-3 h-3 rounded-full run-type-race mr-2"></div>
             <span>Race</span>
           </div>
+          <div className="flex items-center">
+            <div className="w-3 h-3 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 mr-2"></div>
+            <span>Other</span>
+          </div>
         </div>
       </div>
+
+      {/* Popups */}
+      <RunDayPopup
+        runs={selectedRuns}
+        date={selectedDate}
+        isOpen={showDayPopup}
+        onClose={closeDayPopup}
+        onRunClick={handleRunClick}
+      />
+
+      <RunDetailModal
+        run={selectedRun}
+        isOpen={showDetailModal}
+        onClose={closeDetailModal}
+        onEdit={handleEditRun}
+      />
     </div>
   );
 }

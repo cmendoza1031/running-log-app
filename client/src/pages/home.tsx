@@ -1,16 +1,36 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import WeeklyChart from "@/components/weekly-chart";
-import { getWeeklyMileage, getCurrentWeekMileage } from "@/lib/date-utils";
+import WeekDetailModal from "@/components/week-detail-modal";
+import RunDetailModal from "@/components/run-detail-modal";
+import { getMonthlyWeeklyMileage, getCurrentWeekMileage, getCurrentWeekTime, getMonthlyWeeklyTime } from "@/lib/date-utils";
 import type { Run } from "@shared/schema";
 
 export default function Home() {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedWeek, setSelectedWeek] = useState<{
+    index: number;
+    label: string;
+    miles: number;
+    time?: number;
+  } | null>(null);
+  const [showWeekDetail, setShowWeekDetail] = useState(false);
+  const [selectedRun, setSelectedRun] = useState<Run | null>(null);
+  const [showRunDetail, setShowRunDetail] = useState(false);
+  const [, setLocation] = useLocation();
+  
+  const currentMonth = currentDate.getMonth() + 1;
+  const currentYear = currentDate.getFullYear();
+  
   const { data: runs, isLoading } = useQuery<Run[]>({
-    queryKey: ['/api/runs'],
+    queryKey: ['/api/runs/month', currentYear, currentMonth],
   });
 
   if (isLoading) {
     return (
-      <div className="px-6">
+      <div className="px-6 pt-8">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-semibold text-gray-800 mb-2">Milestones</h1>
           <p className="text-skyblue text-lg font-medium">Weekly</p>
@@ -24,7 +44,8 @@ export default function Home() {
   }
 
   const currentWeekMiles = getCurrentWeekMileage(runs || []);
-  const weeklyData = getWeeklyMileage(runs || []);
+  const currentWeekTime = getCurrentWeekTime(runs || []);
+  const weeklyData = getMonthlyWeeklyMileage(runs || [], currentYear, currentMonth);
   
   // Calculate statistics
   const totalRuns = runs?.length || 0;
@@ -35,8 +56,61 @@ export default function Home() {
   const avgPaceMinutes = Math.floor(avgPace);
   const avgPaceSeconds = Math.round((avgPace - avgPaceMinutes) * 60);
 
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    const newDate = new Date(currentDate);
+    if (direction === 'prev') {
+      newDate.setMonth(newDate.getMonth() - 1);
+    } else {
+      newDate.setMonth(newDate.getMonth() + 1);
+    }
+    setCurrentDate(newDate);
+  };
+
+  const handleWeekClick = (weekIndex: number, weekLabel: string, miles: number, time?: number) => {
+    setSelectedWeek({ index: weekIndex, label: weekLabel, miles, time });
+    setShowWeekDetail(true);
+  };
+
+  const handleRunClick = (run: Run) => {
+    setShowWeekDetail(false);
+    setSelectedRun(run);
+    setShowRunDetail(true);
+  };
+
+  const handleEditRun = (run: Run) => {
+    setShowRunDetail(false);
+    setLocation(`/log-activity?edit=${run.id}`);
+  };
+
+  const handleAddRun = () => {
+    setShowWeekDetail(false);
+    setLocation('/log-activity');
+  };
+
+  const closeWeekDetail = () => {
+    setShowWeekDetail(false);
+    setSelectedWeek(null);
+  };
+
+  const closeRunDetail = () => {
+    setShowRunDetail(false);
+    setSelectedRun(null);
+  };
+
+  const formatTime = (totalMinutes: number) => {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours === 0) return `${minutes}min`;
+    return `${hours}hr ${minutes}min`;
+  };
+
   return (
-    <div className="px-6" data-testid="home-page">
+    <div className="px-6 pt-8" data-testid="home-page">
       <div className="text-center mb-8">
         <h1 className="text-3xl font-semibold text-gray-800 mb-2" data-testid="text-page-title">
           Milestones
@@ -47,14 +121,41 @@ export default function Home() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+        {/* Chart Header with Navigation */}
         <div className="flex justify-between items-center mb-4">
-          <span className="text-2xl font-bold text-gray-800" data-testid="text-current-week-miles">
-            {currentWeekMiles.toFixed(1)} mi
-          </span>
+          <button 
+            className="p-2 text-skyblue"
+            onClick={() => navigateMonth('prev')}
+            data-testid="button-prev-month"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <h3 className="text-lg font-semibold text-gray-800" data-testid="text-current-month">
+            {monthNames[currentMonth - 1]} {currentYear}
+          </h3>
+          <button 
+            className="p-2 text-skyblue"
+            onClick={() => navigateMonth('next')}
+            data-testid="button-next-month"
+          >
+            <ChevronRight size={20} />
+          </button>
+        </div>
+
+        {/* Current Week Stats */}
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <span className="text-2xl font-bold text-gray-800" data-testid="text-current-week-miles">
+              {currentWeekMiles.toFixed(1)} mi
+            </span>
+            <span className="text-skyblue text-lg font-medium ml-2" data-testid="text-current-week-time">
+              {formatTime(currentWeekTime)}
+            </span>
+          </div>
           <span className="text-sm text-gray-500">This Week</span>
         </div>
         
-        <WeeklyChart data={weeklyData} />
+        <WeeklyChart data={weeklyData} onDotClick={handleWeekClick} />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -71,6 +172,27 @@ export default function Home() {
           <div className="text-gray-600 text-sm">Avg Pace</div>
         </div>
       </div>
+
+      {/* Modals */}
+      {selectedWeek && (
+        <WeekDetailModal
+          weekLabel={selectedWeek.label}
+          weekIndex={selectedWeek.index}
+          totalMiles={selectedWeek.miles}
+          totalTime={selectedWeek.time}
+          isOpen={showWeekDetail}
+          onClose={closeWeekDetail}
+          onRunClick={handleRunClick}
+          onAddRun={handleAddRun}
+        />
+      )}
+
+      <RunDetailModal
+        run={selectedRun}
+        isOpen={showRunDetail}
+        onClose={closeRunDetail}
+        onEdit={handleEditRun}
+      />
     </div>
   );
 }

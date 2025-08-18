@@ -18,9 +18,7 @@ export const runs = pgTable("runs", {
   timeMinutes: integer("time_minutes").notNull(),
   paceMinutes: integer("pace_minutes").notNull(),
   paceSeconds: integer("pace_seconds").notNull(),
-  runType: text("run_type", { 
-    enum: ["easy", "tempo", "long", "interval", "trail", "threshold", "workout", "race"] 
-  }).notNull(),
+  runType: text("run_type").notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

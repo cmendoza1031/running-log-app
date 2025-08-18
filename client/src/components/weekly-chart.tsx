@@ -28,10 +28,12 @@ interface WeeklyChartProps {
   data: {
     labels: string[];
     values: number[];
+    times?: number[];
   };
+  onDotClick?: (weekIndex: number, weekLabel: string, miles: number, time?: number) => void;
 }
 
-export default function WeeklyChart({ data }: WeeklyChartProps) {
+export default function WeeklyChart({ data, onDotClick }: WeeklyChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<ChartJS | null>(null);
 
@@ -80,6 +82,18 @@ export default function WeeklyChart({ data }: WeeklyChartProps) {
             borderColor: '#4A90E2',
             borderWidth: 1,
             cornerRadius: 8,
+            callbacks: {
+              afterBody: (context: any) => {
+                if (data.times && data.times[context[0].dataIndex]) {
+                  const totalMinutes = data.times[context[0].dataIndex];
+                  const hours = Math.floor(totalMinutes / 60);
+                  const minutes = totalMinutes % 60;
+                  const timeText = hours === 0 ? `${minutes}min` : `${hours}hr ${minutes}min`;
+                  return [`Total time: ${timeText}`];
+                }
+                return [];
+              }
+            }
           }
         },
         scales: {
@@ -111,6 +125,15 @@ export default function WeeklyChart({ data }: WeeklyChartProps) {
         elements: {
           point: {
             hoverBackgroundColor: '#357ABD'
+          }
+        },
+        onClick: (event: any, elements: any) => {
+          if (elements && elements.length > 0 && onDotClick) {
+            const elementIndex = elements[0].index;
+            const weekLabel = data.labels[elementIndex];
+            const miles = data.values[elementIndex];
+            const time = data.times ? data.times[elementIndex] : undefined;
+            onDotClick(elementIndex, weekLabel, miles, time);
           }
         }
       }
