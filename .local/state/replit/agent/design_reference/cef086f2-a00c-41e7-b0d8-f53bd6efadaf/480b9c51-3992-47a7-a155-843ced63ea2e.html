@@ -1,0 +1,479 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RunTrack - Running Log App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ivory: '#F5F5DC',
+                        skyblue: {
+                            light: '#87CEEB',
+                            DEFAULT: '#4A90E2',
+                            dark: '#357ABD'
+                        }
+                    },
+                    fontFamily: {
+                        'system': ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'Segoe UI', 'Roboto', 'sans-serif']
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        /* Custom styles for scroll wheel and iOS-like interactions */
+        .scroll-wheel {
+            -webkit-appearance: none;
+            -moz-appearance: textfield;
+        }
+        .scroll-wheel::-webkit-outer-spin-button,
+        .scroll-wheel::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 280px;
+        }
+        
+        .ios-input {
+            -webkit-appearance: none;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+        }
+        
+        .ios-input:focus {
+            transform: scale(1.02);
+            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+        }
+        
+        .page {
+            display: none;
+        }
+        
+        .page.active {
+            display: block;
+        }
+        
+        .tab-button.active {
+            color: #4A90E2;
+        }
+        
+        .calendar-day {
+            transition: all 0.2s ease;
+        }
+        
+        .calendar-day:hover {
+            transform: scale(1.05);
+        }
+        
+        .run-type-easy { background: linear-gradient(135deg, #E8F4FD, #B3E5FC); }
+        .run-type-tempo { background: linear-gradient(135deg, #FFF3E0, #FFE0B2); }
+        .run-type-long { background: linear-gradient(135deg, #F3E5F5, #E1BEE7); }
+        .run-type-interval { background: linear-gradient(135deg, #FFEBEE, #FFCDD2); }
+    </style>
+</head>
+<body class="bg-ivory min-h-screen font-system">
+    <!-- @COMPONENT: MainApp [handles navigation state] -->
+    <div class="max-w-sm mx-auto bg-ivory min-h-screen relative pb-20">
+        
+        <!-- Status Bar -->
+        <div class="flex justify-between items-center p-4 pt-8">
+            <span class="text-lg font-medium text-gray-800">91</span>
+            <div class="flex items-center space-x-1">
+                <i class="fas fa-signal text-gray-600"></i>
+                <i class="fas fa-battery-three-quarters text-gray-600"></i>
+            </div>
+        </div>
+
+        <!-- @COMPONENT: HomePage [weekly chart view] -->
+        <div id="home-page" class="page active px-6">
+            <!-- @STATE: chartData:object, weeklyMiles:array -->
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-semibold text-gray-800 mb-2">Milestones</h1>
+                <p class="text-skyblue text-lg font-medium">Weekly</p>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-2xl font-bold text-gray-800" data-bind="currentWeekMiles">26.2 mi</span>
+                    <span class="text-sm text-gray-500">This Week</span>
+                </div>
+                
+                <div class="chart-container">
+                    <canvas id="weeklyChart"></canvas>
+                </div>
+                
+                <!-- @FUNCTIONALITY: Chart should display last 6 weeks of data with Monday start -->
+                <div class="flex justify-between text-xs text-gray-400 mt-2">
+                    <span>Apr 7</span>
+                    <span>Apr 14</span>
+                    <span>Apr 21</span>
+                    <span>Apr 28</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-white rounded-xl p-4 shadow-sm">
+                    <div class="text-skyblue text-2xl font-bold" data-bind="totalRuns">12</div>
+                    <div class="text-gray-600 text-sm">Total Runs</div>
+                </div>
+                <div class="bg-white rounded-xl p-4 shadow-sm">
+                    <div class="text-skyblue text-2xl font-bold" data-bind="avgPace">8:45</div>
+                    <div class="text-gray-600 text-sm">Avg Pace</div>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: HomePage -->
+
+        <!-- @COMPONENT: JourneyPage [monthly calendar view] -->
+        <div id="journey-page" class="page px-6">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-semibold text-gray-800 mb-2">Journey</h1>
+                <p class="text-skyblue text-lg font-medium">Monthly Progress</p>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+                <div class="text-center mb-6">
+                    <div class="text-3xl font-bold text-skyblue" data-bind="monthlyMiles">84.3</div>
+                    <div class="text-gray-600">Miles this month</div>
+                </div>
+
+                <!-- Calendar Header -->
+                <div class="flex justify-between items-center mb-4">
+                    <button class="p-2 text-skyblue">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <h3 class="text-lg font-semibold text-gray-800">April 2024</h3>
+                    <button class="p-2 text-skyblue">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+
+                <!-- Calendar Days -->
+                <div class="grid grid-cols-7 gap-1 mb-2">
+                    <div class="text-center text-xs text-gray-400 p-2">Mon</div>
+                    <div class="text-center text-xs text-gray-400 p-2">Tue</div>
+                    <div class="text-center text-xs text-gray-400 p-2">Wed</div>
+                    <div class="text-center text-xs text-gray-400 p-2">Thu</div>
+                    <div class="text-center text-xs text-gray-400 p-2">Fri</div>
+                    <div class="text-center text-xs text-gray-400 p-2">Sat</div>
+                    <div class="text-center text-xs text-gray-400 p-2">Sun</div>
+                </div>
+
+                <!-- @MAP: calendarDays.map(day => ( -->
+                <div class="grid grid-cols-7 gap-1">
+                    <div class="calendar-day h-10 flex items-center justify-center text-sm rounded-lg run-type-easy">
+                        <span class="text-gray-600">1</span>
+                    </div>
+                    <div class="calendar-day h-10 flex items-center justify-center text-sm rounded-lg">
+                        <span class="text-gray-400">2</span>
+                    </div>
+                    <div class="calendar-day h-10 flex items-center justify-center text-sm rounded-lg run-type-tempo">
+                        <span class="text-gray-600">3</span>
+                    </div>
+                    <div class="calendar-day h-10 flex items-center justify-center text-sm rounded-lg">
+                        <span class="text-gray-400">4</span>
+                    </div>
+                    <div class="calendar-day h-10 flex items-center justify-center text-sm rounded-lg run-type-interval">
+                        <span class="text-gray-600">5</span>
+                    </div>
+                    <div class="calendar-day h-10 flex items-center justify-center text-sm rounded-lg run-type-long">
+                        <span class="text-gray-600">6</span>
+                    </div>
+                    <div class="calendar-day h-10 flex items-center justify-center text-sm rounded-lg">
+                        <span class="text-gray-400">7</span>
+                    </div>
+                    <!-- Continue for remaining days... -->
+                    <div class="calendar-day h-10 flex items-center justify-center text-sm rounded-lg run-type-easy">
+                        <span class="text-gray-600">8</span>
+                    </div>
+                    <div class="calendar-day h-10 flex items-center justify-center text-sm rounded-lg">
+                        <span class="text-gray-400">9</span>
+                    </div>
+                    <div class="calendar-day h-10 flex items-center justify-center text-sm rounded-lg run-type-tempo">
+                        <span class="text-gray-600">10</span>
+                    </div>
+                    <div class="calendar-day h-10 flex items-center justify-center text-sm rounded-lg">
+                        <span class="text-gray-400">11</span>
+                    </div>
+                    <div class="calendar-day h-10 flex items-center justify-center text-sm rounded-lg run-type-easy">
+                        <span class="text-gray-600">12</span>
+                    </div>
+                    <div class="calendar-day h-10 flex items-center justify-center text-sm rounded-lg run-type-long">
+                        <span class="text-gray-600">13</span>
+                    </div>
+                    <div class="calendar-day h-10 flex items-center justify-center text-sm rounded-lg">
+                        <span class="text-gray-400">14</span>
+                    </div>
+                </div>
+                <!-- @END_MAP )) -->
+            </div>
+
+            <!-- Run Type Legend -->
+            <div class="bg-white rounded-xl p-4 shadow-sm">
+                <h4 class="text-sm font-medium text-gray-800 mb-3">Run Types</h4>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 rounded-full run-type-easy mr-2"></div>
+                        <span>Easy</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 rounded-full run-type-tempo mr-2"></div>
+                        <span>Tempo</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 rounded-full run-type-long mr-2"></div>
+                        <span>Long</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 rounded-full run-type-interval mr-2"></div>
+                        <span>Interval</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: JourneyPage -->
+
+        <!-- @COMPONENT: LogActivityPage [run input form] -->
+        <div id="log-page" class="page px-6">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-semibold text-gray-800 mb-2">Log Activity</h1>
+                <p class="text-skyblue text-lg font-medium">Record Your Run</p>
+            </div>
+
+            <form class="space-y-6">
+                <!-- @STATE: formData:object with distance, pace, time, runType, notes -->
+                
+                <!-- Distance Input -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm">
+                    <label class="block text-sm font-medium text-gray-700 mb-3">Distance</label>
+                    <div class="flex items-center space-x-3">
+                        <input type="number" step="0.1" class="ios-input flex-1 bg-gray-50 border-0 rounded-xl px-4 py-3 text-lg font-medium text-center" placeholder="0.0" data-bind="formData.distance">
+                        <span class="text-gray-500 font-medium">miles</span>
+                    </div>
+                </div>
+
+                <!-- Pace Input with Scroll Wheels -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm">
+                    <label class="block text-sm font-medium text-gray-700 mb-3">Pace</label>
+                    <div class="flex items-center justify-center space-x-2">
+                        <select class="ios-input bg-gray-50 border-0 rounded-xl px-3 py-3 text-lg font-medium text-center scroll-wheel" data-bind="formData.paceMinutes">
+                            <option value="5">5</option>
+                            <option value="6">6</option>
+                            <option value="7">7</option>
+                            <option value="8" selected>8</option>
+                            <option value="9">9</option>
+                            <option value="10">10</option>
+                            <option value="11">11</option>
+                            <option value="12">12</option>
+                        </select>
+                        <span class="text-lg font-medium text-gray-500">:</span>
+                        <select class="ios-input bg-gray-50 border-0 rounded-xl px-3 py-3 text-lg font-medium text-center scroll-wheel" data-bind="formData.paceSeconds">
+                            <option value="00">00</option>
+                            <option value="15">15</option>
+                            <option value="30">30</option>
+                            <option value="45" selected>45</option>
+                        </select>
+                        <span class="text-gray-500 font-medium">per mile</span>
+                    </div>
+                </div>
+
+                <!-- Time Input -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm">
+                    <label class="block text-sm font-medium text-gray-700 mb-3">Total Time</label>
+                    <div class="flex items-center justify-center space-x-2">
+                        <select class="ios-input bg-gray-50 border-0 rounded-xl px-3 py-3 text-lg font-medium text-center scroll-wheel" data-bind="formData.hours">
+                            <option value="0" selected>0</option>
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                        </select>
+                        <span class="text-lg font-medium text-gray-500">h</span>
+                        <select class="ios-input bg-gray-50 border-0 rounded-xl px-3 py-3 text-lg font-medium text-center scroll-wheel" data-bind="formData.minutes">
+                            <option value="15">15</option>
+                            <option value="30">30</option>
+                            <option value="45" selected>45</option>
+                            <option value="60">60</option>
+                        </select>
+                        <span class="text-lg font-medium text-gray-500">min</span>
+                    </div>
+                </div>
+
+                <!-- Run Type Selection -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm">
+                    <label class="block text-sm font-medium text-gray-700 mb-3">Run Type</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button type="button" class="ios-input bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-skyblue text-skyblue-dark py-3 px-4 rounded-xl font-medium text-sm active-run-type" data-value="easy">
+                            Easy Run
+                        </button>
+                        <button type="button" class="ios-input bg-gray-50 border-2 border-transparent text-gray-600 py-3 px-4 rounded-xl font-medium text-sm" data-value="tempo">
+                            Tempo
+                        </button>
+                        <button type="button" class="ios-input bg-gray-50 border-2 border-transparent text-gray-600 py-3 px-4 rounded-xl font-medium text-sm" data-value="long">
+                            Long Run
+                        </button>
+                        <button type="button" class="ios-input bg-gray-50 border-2 border-transparent text-gray-600 py-3 px-4 rounded-xl font-medium text-sm" data-value="interval">
+                            Intervals
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Highlights/Notes -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm">
+                    <label class="block text-sm font-medium text-gray-700 mb-3">Highlight of Run</label>
+                    <textarea 
+                        class="ios-input w-full bg-gray-50 border-0 rounded-xl px-4 py-3 text-base resize-none" 
+                        rows="4" 
+                        placeholder="How did the run feel? Any aches or great moments to remember..."
+                        data-bind="formData.notes">
+                    </textarea>
+                </div>
+
+                <!-- Submit Button -->
+                <button 
+                    type="submit" 
+                    class="w-full bg-skyblue text-white py-4 rounded-2xl font-semibold text-lg shadow-lg active:scale-95 transition-all duration-200"
+                    data-event="click:handleRunSubmit"
+                    data-implementation="Should validate form and save to storage">
+                    Log Run
+                </button>
+            </form>
+        </div>
+        <!-- @END_COMPONENT: LogActivityPage -->
+
+        <!-- @COMPONENT: BottomNavigation [tab navigation] -->
+        <nav class="fixed bottom-0 left-1/2 transform -translate-x-1/2 max-w-sm w-full bg-white border-t border-gray-100 px-6 py-2">
+            <div class="flex justify-around items-center">
+                <button class="tab-button active flex flex-col items-center py-2 px-3" data-tab="home-page">
+                    <i class="fas fa-home text-xl mb-1"></i>
+                    <span class="text-xs">Home</span>
+                </button>
+                <button class="tab-button flex flex-col items-center py-2 px-3 text-gray-400" data-tab="journey-page">
+                    <i class="fas fa-calendar text-xl mb-1"></i>
+                    <span class="text-xs">Journey</span>
+                </button>
+                <button class="tab-button flex flex-col items-center py-2 px-3 text-gray-400" data-tab="log-page">
+                    <i class="fas fa-plus text-xl mb-1"></i>
+                    <span class="text-xs">Log</span>
+                </button>
+            </div>
+        </nav>
+        <!-- @END_COMPONENT: BottomNavigation -->
+    </div>
+    <!-- @END_COMPONENT: MainApp -->
+
+    <script>
+        (() => {
+            // TODO: Implement business logic, API calls, and state management
+            
+            // Tab Navigation
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const pages = document.querySelectorAll('.page');
+            
+            function switchTab(targetPageId) {
+                pages.forEach(page => page.classList.remove('active'));
+                tabButtons.forEach(button => button.classList.remove('active'));
+                
+                document.getElementById(targetPageId).classList.add('active');
+                document.querySelector(`[data-tab="${targetPageId}"]`).classList.add('active');
+            }
+            
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const targetPage = button.getAttribute('data-tab');
+                    switchTab(targetPage);
+                });
+            });
+
+            // Run Type Selection
+            const runTypeButtons = document.querySelectorAll('[data-value]');
+            runTypeButtons.forEach(button => {
+                button.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    runTypeButtons.forEach(btn => {
+                        btn.classList.remove('active-run-type', 'bg-gradient-to-br', 'from-blue-50', 'to-blue-100', 'border-skyblue', 'text-skyblue-dark');
+                        btn.classList.add('bg-gray-50', 'border-transparent', 'text-gray-600');
+                    });
+                    button.classList.remove('bg-gray-50', 'border-transparent', 'text-gray-600');
+                    button.classList.add('active-run-type', 'bg-gradient-to-br', 'from-blue-50', 'to-blue-100', 'border-skyblue', 'text-skyblue-dark');
+                });
+            });
+
+            // Weekly Chart Implementation
+            const ctx = document.getElementById('weeklyChart').getContext('2d');
+            
+            // Mock data for the past 6 weeks
+            const weeklyData = {
+                labels: ['Mar 18', 'Mar 25', 'Apr 1', 'Apr 8', 'Apr 15', 'Apr 22'],
+                datasets: [{
+                    label: 'Weekly Miles',
+                    data: [15.2, 18.5, 22.1, 19.8, 24.3, 26.2],
+                    borderColor: '#4A90E2',
+                    backgroundColor: 'rgba(74, 144, 226, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#4A90E2',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2,
+                    pointRadius: 6,
+                    pointHoverRadius: 8
+                }]
+            };
+
+            new Chart(ctx, {
+                type: 'line',
+                data: weeklyData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 30,
+                            grid: {
+                                color: 'rgba(0,0,0,0.05)'
+                            },
+                            ticks: {
+                                color: '#9CA3AF'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: '#9CA3AF'
+                            }
+                        }
+                    },
+                    elements: {
+                        point: {
+                            hoverBackgroundColor: '#357ABD'
+                        }
+                    }
+                }
+            });
+
+            // Form submission handler
+            document.querySelector('form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                // TODO: Implement form validation and data storage
+                alert('Run logged successfully!');
+            });
+
+        })();
+    </script>
+</body>
+</html>
