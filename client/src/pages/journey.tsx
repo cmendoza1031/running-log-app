@@ -54,7 +54,7 @@ export default function Journey() {
 
   const handleEditRun = (run: Run) => {
     setShowDetailModal(false);
-    setLocation(`/log-activity?edit=${run.id}`);
+    setLocation(`/log?edit=${run.id}`);
   };
 
   const closeDayPopup = () => {

@@ -9,6 +9,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import ScrollWheel from "@/components/scroll-wheel";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -36,10 +37,20 @@ export default function LogActivity() {
   const [customRunType, setCustomRunType] = useState<string>("");
   const [paceMinutes, setPaceMinutes] = useState<number>(8);
   const [paceSeconds, setPaceSeconds] = useState<number>(45);
+  const [timeHours, setTimeHours] = useState<number>(0);
+  const [timeMinutes, setTimeMinutes] = useState<number>(45);
+  const [showPacePopup, setShowPacePopup] = useState<boolean>(false);
+  const [showTimePopup, setShowTimePopup] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [editingRunId, setEditingRunId] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Helper function to invalidate cache after changes
+  const invalidateRunsCache = () => {
+    queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/runs/month'] });
+  };
   
   // Get run ID from URL search params
   const editRunId = new URLSearchParams(window.location.search).get('edit');
@@ -73,12 +84,14 @@ export default function LogActivity() {
       setSelectedRunType(editingRun.runType);
       setPaceMinutes(editingRun.paceMinutes);
       setPaceSeconds(editingRun.paceSeconds);
+      setTimeHours(editingRun.timeHours || 0);
+      setTimeMinutes(editingRun.timeMinutes);
       
       form.reset({
         distance: editingRun.distance,
         paceMinutes: editingRun.paceMinutes,
         paceSeconds: editingRun.paceSeconds,
-        timeHours: editingRun.timeHours.toString(),
+        timeHours: (editingRun.timeHours || 0).toString(),
         timeMinutes: editingRun.timeMinutes.toString(),
         runType: editingRun.runType,
         notes: editingRun.notes || "",
@@ -121,13 +134,39 @@ export default function LogActivity() {
       distance: data.distance,
       paceMinutes: paceMinutes,
       paceSeconds: paceSeconds,
-      timeHours: parseInt(data.timeHours),
-      timeMinutes: parseInt(data.timeMinutes),
+      timeHours: timeHours,
+      timeMinutes: timeMinutes,
       runType: finalRunType,
       notes: data.notes,
       date: data.date,
     };
-    saveRunMutation.mutate(submitData);
+    
+    if (isEditing && editingRunId) {
+      // Update existing run
+      fetch(`/api/runs/${editingRunId}`, {
+        method: 'PUT',
+        body: JSON.stringify(submitData),
+        headers: { 'Content-Type': 'application/json' }
+      }).then(response => {
+        if (!response.ok) throw new Error('Failed to update run');
+        return response.json();
+      }).then(() => {
+        toast({
+          title: "Run updated successfully!",
+          description: "Your run has been updated.",
+        });
+        queryClient.invalidateQueries({ queryKey: ['/api/runs'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/runs/month'] });
+      }).catch((error) => {
+        toast({
+          title: "Error updating run",
+          description: error?.message || "Please try again.",
+          variant: "destructive",
+        });
+      });
+    } else {
+      saveRunMutation.mutate(submitData);
+    }
   };
 
   const handleSave = () => {
@@ -191,92 +230,30 @@ export default function LogActivity() {
           {/* Pace Input */}
           <div className="bg-white rounded-2xl p-6 shadow-sm">
             <FormLabel className="block text-sm font-medium text-gray-700 mb-3">Pace</FormLabel>
-            <div className="flex items-center justify-center space-x-4">
-              <div className="flex flex-col items-center">
-                <ScrollWheel
-                  value={paceMinutes}
-                  onChange={setPaceMinutes}
-                  min={4}
-                  max={15}
-                  className="bg-gray-50 rounded-xl"
-                  dataTestId="scroll-pace-minutes"
-                />
-                <span className="text-xs text-gray-500 mt-2">min</span>
+            <div 
+              onClick={() => setShowPacePopup(true)}
+              className="ios-input bg-gray-50 border-0 rounded-xl px-4 py-4 text-center cursor-pointer active:bg-gray-100 transition-colors"
+              data-testid="input-pace-display"
+            >
+              <div className="text-2xl font-semibold text-gray-800">
+                {paceMinutes}:{paceSeconds.toString().padStart(2, '0')}
               </div>
-              <span className="text-2xl font-medium text-gray-500 pt-8">:</span>
-              <div className="flex flex-col items-center">
-                <ScrollWheel
-                  value={paceSeconds}
-                  onChange={setPaceSeconds}
-                  min={0}
-                  max={59}
-                  className="bg-gray-50 rounded-xl"
-                  dataTestId="scroll-pace-seconds"
-                />
-                <span className="text-xs text-gray-500 mt-2">sec</span>
-              </div>
-            </div>
-            <div className="text-center mt-3">
-              <span className="text-gray-500 font-medium">per mile</span>
+              <div className="text-sm text-gray-500 mt-1">per mile</div>
             </div>
           </div>
 
           {/* Time Input */}
           <div className="bg-white rounded-2xl p-6 shadow-sm">
             <FormLabel className="block text-sm font-medium text-gray-700 mb-3">Total Time</FormLabel>
-            <div className="flex items-center justify-center space-x-2">
-              <FormField
-                control={form.control}
-                name="timeHours"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <SelectTrigger 
-                          className="ios-input bg-gray-50 border-0 rounded-xl px-3 py-3 text-lg font-medium text-center w-20"
-                          data-testid="select-time-hours"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 4 }, (_, i) => i).map((num) => (
-                            <SelectItem key={num} value={num.toString()}>
-                              {num}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              <span className="text-lg font-medium text-gray-500">h</span>
-              <FormField
-                control={form.control}
-                name="timeMinutes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <SelectTrigger 
-                          className="ios-input bg-gray-50 border-0 rounded-xl px-3 py-3 text-lg font-medium text-center w-20"
-                          data-testid="select-time-minutes"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 12 }, (_, i) => (i + 1) * 5).map((num) => (
-                            <SelectItem key={num} value={num.toString()}>
-                              {num}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              <span className="text-lg font-medium text-gray-500">min</span>
+            <div 
+              onClick={() => setShowTimePopup(true)}
+              className="ios-input bg-gray-50 border-0 rounded-xl px-4 py-4 text-center cursor-pointer active:bg-gray-100 transition-colors"
+              data-testid="input-time-display"
+            >
+              <div className="text-2xl font-semibold text-gray-800">
+                {timeHours > 0 ? `${timeHours}hr ` : ''}{timeMinutes}min
+              </div>
+              <div className="text-sm text-gray-500 mt-1">total time</div>
             </div>
           </div>
 
@@ -288,7 +265,10 @@ export default function LogActivity() {
                 <button
                   key={type.value}
                   type="button"
-                  onClick={() => setSelectedRunType(type.value)}
+                  onClick={() => {
+                    setSelectedRunType(type.value);
+                    invalidateRunsCache();
+                  }}
                   className={`ios-input py-3 px-4 rounded-xl font-medium text-sm transition-all ${
                     selectedRunType === type.value
                       ? 'bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-skyblue text-skyblue-dark'
@@ -305,7 +285,10 @@ export default function LogActivity() {
               <div className="mt-3">
                 <Input
                   value={customRunType}
-                  onChange={(e) => setCustomRunType(e.target.value)}
+                  onChange={(e) => {
+                    setCustomRunType(e.target.value);
+                    invalidateRunsCache();
+                  }}
                   placeholder="Enter custom run type..."
                   className="ios-input bg-gray-50 border-0 rounded-xl px-4 py-3"
                   data-testid="input-custom-run-type"
@@ -359,6 +342,102 @@ export default function LogActivity() {
           </Button>
         </form>
       </Form>
+
+      {/* Pace Popup Modal */}
+      <Dialog open={showPacePopup} onOpenChange={setShowPacePopup}>
+        <DialogContent className="max-w-sm mx-auto bg-ivory rounded-2xl" aria-describedby="pace-selector">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-gray-800 text-center">Set Pace</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center justify-center space-x-4 py-4">
+            <div className="flex flex-col items-center">
+              <ScrollWheel
+                value={paceMinutes}
+                onChange={(value) => {
+                  setPaceMinutes(value);
+                  invalidateRunsCache();
+                }}
+                min={4}
+                max={15}
+                className="bg-gray-50 rounded-xl"
+                dataTestId="scroll-pace-minutes-popup"
+              />
+              <span className="text-xs text-gray-500 mt-2">min</span>
+            </div>
+            <span className="text-2xl font-medium text-gray-500 pt-8">:</span>
+            <div className="flex flex-col items-center">
+              <ScrollWheel
+                value={paceSeconds}
+                onChange={(value) => {
+                  setPaceSeconds(value);
+                  invalidateRunsCache();
+                }}
+                min={0}
+                max={59}
+                className="bg-gray-50 rounded-xl"
+                dataTestId="scroll-pace-seconds-popup"
+              />
+              <span className="text-xs text-gray-500 mt-2">sec</span>
+            </div>
+          </div>
+          <div className="text-center">
+            <span className="text-gray-500 font-medium">per mile</span>
+          </div>
+          <Button
+            onClick={() => setShowPacePopup(false)}
+            className="w-full bg-skyblue text-white py-3 rounded-xl font-medium text-base mt-4"
+            data-testid="button-set-pace"
+          >
+            Set Pace
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* Time Popup Modal */}
+      <Dialog open={showTimePopup} onOpenChange={setShowTimePopup}>
+        <DialogContent className="max-w-sm mx-auto bg-ivory rounded-2xl" aria-describedby="time-selector">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-gray-800 text-center">Set Total Time</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center justify-center space-x-4 py-4">
+            <div className="flex flex-col items-center">
+              <ScrollWheel
+                value={timeHours}
+                onChange={(value) => {
+                  setTimeHours(value);
+                  invalidateRunsCache();
+                }}
+                min={0}
+                max={3}
+                className="bg-gray-50 rounded-xl"
+                dataTestId="scroll-time-hours-popup"
+              />
+              <span className="text-xs text-gray-500 mt-2">hr</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <ScrollWheel
+                value={timeMinutes}
+                onChange={(value) => {
+                  setTimeMinutes(value);
+                  invalidateRunsCache();
+                }}
+                min={5}
+                max={180}
+                className="bg-gray-50 rounded-xl"
+                dataTestId="scroll-time-minutes-popup"
+              />
+              <span className="text-xs text-gray-500 mt-2">min</span>
+            </div>
+          </div>
+          <Button
+            onClick={() => setShowTimePopup(false)}
+            className="w-full bg-skyblue text-white py-3 rounded-xl font-medium text-base mt-4"
+            data-testid="button-set-time"
+          >
+            Set Time
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

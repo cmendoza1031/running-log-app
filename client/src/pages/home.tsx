@@ -98,7 +98,7 @@ export default function Home() {
 
   const handleEditRun = (run: Run) => {
     setShowRunDetail(false);
-    setLocation(`/log-activity?edit=${run.id}`);
+    setLocation(`/log?edit=${run.id}`);
   };
 
   const handleAddRun = () => {
