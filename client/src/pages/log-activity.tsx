@@ -16,9 +16,74 @@ import { useToast } from "@/hooks/use-toast";
 import { insertRunSchema } from "@shared/schema";
 import { IOSFeedbackManager, IOSButtonInteractions, isNative } from "@/lib/ios-utils";
 
+// ─── Sport + workout type config ──────────────────────────────────────────────
+
+const SPORT_CONFIG = {
+  running: {
+    emoji: "🏃",
+    label: "Run",
+    distanceUnit: "miles",
+    paceUnit: "per mile",
+    workoutTypes: [
+      { value: "easy", label: "Easy" },
+      { value: "tempo", label: "Tempo" },
+      { value: "long", label: "Long Run" },
+      { value: "interval", label: "Intervals" },
+      { value: "threshold", label: "Threshold" },
+      { value: "trail", label: "Trail" },
+      { value: "recovery", label: "Recovery" },
+      { value: "race", label: "Race" },
+    ],
+  },
+  cycling: {
+    emoji: "🚴",
+    label: "Bike",
+    distanceUnit: "miles",
+    paceUnit: "per mile",
+    workoutTypes: [
+      { value: "easy_ride", label: "Easy Ride" },
+      { value: "tempo_ride", label: "Tempo Ride" },
+      { value: "long_ride", label: "Long Ride" },
+      { value: "interval_ride", label: "Intervals" },
+      { value: "hill_ride", label: "Hills" },
+      { value: "recovery_ride", label: "Recovery" },
+      { value: "race_ride", label: "Race" },
+    ],
+  },
+  swimming: {
+    emoji: "🏊",
+    label: "Swim",
+    distanceUnit: "yards",
+    paceUnit: "per 100y",
+    workoutTypes: [
+      { value: "easy_swim", label: "Easy Swim" },
+      { value: "threshold_swim", label: "Threshold" },
+      { value: "interval_swim", label: "Intervals" },
+      { value: "open_water", label: "Open Water" },
+      { value: "drill", label: "Drills" },
+      { value: "race_swim", label: "Race" },
+    ],
+  },
+  triathlon: {
+    emoji: "🥇",
+    label: "Multi",
+    distanceUnit: "miles",
+    paceUnit: "per mile",
+    workoutTypes: [
+      { value: "brick", label: "Brick" },
+      { value: "transition", label: "Transition" },
+      { value: "easy", label: "Easy" },
+      { value: "race", label: "Race" },
+      { value: "other", label: "Other" },
+    ],
+  },
+} as const;
+
+type SportKey = keyof typeof SPORT_CONFIG;
+
 const formSchema = insertRunSchema.extend({
   distance: z.string().min(1, "Distance is required"),
-  paceMinutes: z.number().min(4).max(15),
+  paceMinutes: z.number().min(0).max(59),
   paceSeconds: z.number().min(0).max(59),
   timeHours: z.string(),
   timeMinutes: z.string().min(1, "Time minutes required"),
@@ -34,6 +99,7 @@ const formSchema = insertRunSchema.extend({
 type FormData = z.infer<typeof formSchema>;
 
 export default function LogActivity() {
+  const [selectedSport, setSelectedSport] = useState<SportKey>("running");
   const [selectedRunType, setSelectedRunType] = useState<string>("easy");
   const [customRunType, setCustomRunType] = useState<string>("");
   const [paceMinutes, setPaceMinutes] = useState<number>(8);
@@ -135,10 +201,14 @@ export default function LogActivity() {
     },
   });
 
+  const sportConfig = SPORT_CONFIG[selectedSport];
+
   const onSubmit = (data: FormData) => {
     const finalRunType = selectedRunType === "other" ? customRunType : selectedRunType;
     const submitData = {
+      sportType: selectedSport,
       distance: parseFloat(data.distance),
+      distanceUnit: sportConfig.distanceUnit === "yards" ? "yards" : "mi",
       paceMinutes: paceMinutes,
       paceSeconds: paceSeconds,
       timeHours: timeHours,
@@ -186,50 +256,69 @@ export default function LogActivity() {
     });
   };
 
-  const runTypes = [
-    { value: "easy", label: "Easy Run" },
-    { value: "tempo", label: "Tempo" },
-    { value: "long", label: "Long Run" },
-    { value: "interval", label: "Intervals" },
-    { value: "trail", label: "Trail Run" },
-    { value: "threshold", label: "Threshold" },
-    { value: "race", label: "Race" },
-    { value: "other", label: "Other" },
-  ];
+  // sportConfig defined in onSubmit block above
 
   return (
-    <div className="px-6" data-testid="log-activity-page">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-semibold text-gray-800 mb-2" data-testid="text-page-title">
-          Log Activity
+    <div className="px-5 pb-28" data-testid="log-activity-page">
+      {/* Header */}
+      <div className="pt-14 pb-4">
+        <h1 className="text-2xl font-bold text-gray-900" data-testid="text-page-title">
+          {isEditing ? "Edit Activity" : "Log Activity"}
         </h1>
-        <p className="text-skyblue text-lg font-medium" data-testid="text-page-subtitle">
-          Record Your Run
+        <p className="text-sm text-gray-500 mt-0.5" data-testid="text-page-subtitle">
+          Record your workout
         </p>
       </div>
 
+      {/* Sport selector */}
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 no-scrollbar">
+        {(Object.keys(SPORT_CONFIG) as SportKey[]).map((sport) => {
+          const cfg = SPORT_CONFIG[sport];
+          const isSelected = selectedSport === sport;
+          return (
+            <button
+              key={sport}
+              type="button"
+              onClick={() => {
+                setSelectedSport(sport);
+                setSelectedRunType(SPORT_CONFIG[sport].workoutTypes[0].value);
+                IOSFeedbackManager.lightImpact();
+              }}
+              className={`flex items-center gap-1.5 px-4 py-2.5 rounded-2xl font-semibold text-sm flex-shrink-0 transition-all active:scale-95 ${
+                isSelected
+                  ? "bg-skyblue text-white shadow-md"
+                  : "bg-white text-gray-600 shadow-sm"
+              }`}
+            >
+              <span>{cfg.emoji}</span>
+              <span>{cfg.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           {/* Distance Input */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm">
+          <div className="bg-white rounded-2xl p-5 shadow-sm">
             <FormField
               control={form.control}
               name="distance"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-sm font-medium text-gray-700">Distance</FormLabel>
-                  <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-3 mt-2">
                     <FormControl>
                       <Input
                         {...field}
                         type="number"
-                        step="0.1"
+                        step="0.01"
                         placeholder="0.0"
                         className="ios-input flex-1 bg-gray-50 border-0 rounded-xl px-4 py-3 text-lg font-medium text-center"
                         data-testid="input-distance"
                       />
                     </FormControl>
-                    <span className="text-gray-500 font-medium">miles</span>
+                    <span className="text-gray-500 font-medium text-sm">{sportConfig.distanceUnit}</span>
                   </div>
                   <FormMessage />
                 </FormItem>
@@ -238,9 +327,9 @@ export default function LogActivity() {
           </div>
 
           {/* Pace Input */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm">
+          <div className="bg-white rounded-2xl p-5 shadow-sm">
             <FormLabel className="block text-sm font-medium text-gray-700 mb-3">Pace</FormLabel>
-            <div 
+            <div
               onClick={() => setShowPacePopup(true)}
               className="ios-input bg-gray-50 border-0 rounded-xl px-4 py-4 text-center cursor-pointer active:bg-gray-100 transition-colors"
               data-testid="input-pace-display"
@@ -248,12 +337,12 @@ export default function LogActivity() {
               <div className="text-2xl font-semibold text-gray-800">
                 {paceMinutes}:{paceSeconds.toString().padStart(2, '0')}
               </div>
-              <div className="text-sm text-gray-500 mt-1">per mile</div>
+              <div className="text-sm text-gray-500 mt-1">{sportConfig.paceUnit}</div>
             </div>
           </div>
 
           {/* Time Input */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm">
+          <div className="bg-white rounded-2xl p-5 shadow-sm">
             <FormLabel className="block text-sm font-medium text-gray-700 mb-3">Total Time</FormLabel>
             <div 
               onClick={() => setShowTimePopup(true)}
@@ -267,24 +356,22 @@ export default function LogActivity() {
             </div>
           </div>
 
-          {/* Run Type Selection */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm">
-            <FormLabel className="block text-sm font-medium text-gray-700 mb-3">Run Type</FormLabel>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              {runTypes.map((type) => (
+          {/* Workout Type Selection */}
+          <div className="bg-white rounded-2xl p-5 shadow-sm">
+            <FormLabel className="block text-sm font-medium text-gray-700 mb-3">Workout Type</FormLabel>
+            <div className="grid grid-cols-2 gap-2">
+              {sportConfig.workoutTypes.map((type) => (
                 <button
                   key={type.value}
                   type="button"
                   onClick={async () => {
-                    // Trigger light haptic feedback for selection
                     await IOSFeedbackManager.lightImpact();
                     setSelectedRunType(type.value);
-                    invalidateRunsCache();
                   }}
-                  className={`ios-input py-3 px-4 rounded-xl font-medium text-sm transition-all ${
+                  className={`py-3 px-4 rounded-xl font-medium text-sm transition-all active:scale-95 ${
                     selectedRunType === type.value
-                      ? 'bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-skyblue text-skyblue-dark'
-                      : 'bg-gray-50 border-2 border-transparent text-gray-600'
+                      ? "bg-blue-50 border-2 border-skyblue text-skyblue"
+                      : "bg-gray-50 border-2 border-transparent text-gray-600"
                   }`}
                   data-testid={`button-run-type-${type.value}`}
                 >
@@ -292,21 +379,6 @@ export default function LogActivity() {
                 </button>
               ))}
             </div>
-            
-            {selectedRunType === "other" && (
-              <div className="mt-3">
-                <Input
-                  value={customRunType}
-                  onChange={(e) => {
-                    setCustomRunType(e.target.value);
-                    invalidateRunsCache();
-                  }}
-                  placeholder="Enter custom run type..."
-                  className="ios-input bg-gray-50 border-0 rounded-xl px-4 py-3"
-                  data-testid="input-custom-run-type"
-                />
-              </div>
-            )}
           </div>
 
           {/* Highlights/Notes */}
@@ -321,7 +393,7 @@ export default function LogActivity() {
                     <Textarea
                       {...field}
                       value={field.value || ""}
-                      placeholder="How did the run feel? Any aches or great moments to remember..."
+                      placeholder="How did it feel? Any notes, conditions, or highlights..."
                       className="ios-input w-full bg-gray-50 border-0 rounded-xl px-4 py-3 text-base resize-none"
                       rows={4}
                       data-testid="textarea-notes"

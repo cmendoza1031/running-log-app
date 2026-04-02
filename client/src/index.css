@@ -110,11 +110,20 @@
     @apply border-border;
   }
 
+  html {
+    /* Fill the entire device screen with the app background color — eliminates white bars */
+    background: var(--ivory);
+  }
+
   body {
     @apply font-sans antialiased text-foreground;
     background: var(--ivory);
   }
 }
+
+/* Safe area padding utilities (used inline where Tailwind can't express env()) */
+.safe-top { padding-top: env(safe-area-inset-top, 0px); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 
 /* Custom iOS-like input styles */
 .ios-input {

@@ -124,14 +124,10 @@ export default function Home() {
   };
 
   return (
-    <div className="px-6 pt-8" data-testid="home-page">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-semibold text-gray-800 mb-2" data-testid="text-page-title">
-          Milestones
-        </h1>
-        <p className="text-skyblue text-lg font-medium" data-testid="text-page-subtitle">
-          Weekly
-        </p>
+    <div className="px-5 pb-28" data-testid="home-page">
+      <div className="pt-14 pb-4">
+        <h1 className="text-2xl font-bold text-gray-900" data-testid="text-page-title">Milestones</h1>
+        <p className="text-skyblue text-sm font-medium mt-0.5" data-testid="text-page-subtitle">Weekly</p>
       </div>
 
       <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">

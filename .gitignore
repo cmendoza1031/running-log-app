@@ -5,3 +5,6 @@ server/public
 vite.config.ts.*
 *.tar.gz
 APP_STORE_GUIDE.md
+.env
+.env.local
+*.p8

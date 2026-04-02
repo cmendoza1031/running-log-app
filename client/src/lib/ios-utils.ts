@@ -222,7 +222,7 @@ export class IOSPerformanceManager {
    * Optimize scrolling performance for iOS
    */
   static optimizeScrolling(element: HTMLElement): void {
-    element.style.webkitOverflowScrolling = 'touch';
+    (element.style as CSSStyleDeclaration & { webkitOverflowScrolling?: string }).webkitOverflowScrolling = 'touch';
     element.style.transform = 'translate3d(0,0,0)';
   }
 

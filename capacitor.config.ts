@@ -5,13 +5,18 @@ const config: CapacitorConfig = {
   appName: 'Vista Running',
   webDir: 'dist/public',
   server: {
-    androidScheme: 'https'
+    androidScheme: 'https',
+    // Dev: point to local Express server so /api calls work in the simulator
+    url: 'http://localhost:3003',
+    cleartext: true,
   },
   ios: {
+    // 'automatic': native iOS positions the WebView below the Dynamic Island.
+    // The gap above is filled by backgroundColor (ivory), giving a seamless look.
+    // This is more reliable than 'never' + CSS env() which doesn't work on all iOS versions.
     contentInset: 'automatic',
     scrollEnabled: true,
-    backgroundColor: '#f8f9fa', // Ivory background color
-    // App Store ready iOS configuration
+    backgroundColor: '#f5f5db', // Matches --ivory: hsl(60, 56%, 91%)
     scheme: 'vistarunning',
     path: 'ios'
   },
@@ -19,7 +24,7 @@ const config: CapacitorConfig = {
     SplashScreen: {
       launchShowDuration: 2000,
       launchAutoHide: true,
-      backgroundColor: '#f8f9fa',
+      backgroundColor: '#f5f5db',
       androidSplashResourceName: 'splash',
       androidScaleType: 'CENTER_CROP',
       showSpinner: false,
@@ -28,7 +33,7 @@ const config: CapacitorConfig = {
     },
     StatusBar: {
       style: 'dark',
-      backgroundColor: '#f8f9fa'
+      backgroundColor: '#f5f5db'
     },
     Haptics: {
       // Enable haptic feedback (default enabled on iOS)
