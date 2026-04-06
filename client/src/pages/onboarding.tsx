@@ -1,21 +1,20 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Check } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useQueryClient } from "@tanstack/react-query";
 import { IOSFeedbackManager } from "@/lib/ios-utils";
+import { SCREEN_EDGE_PADDING_BOTTOM, SCREEN_EDGE_PADDING_TOP } from "@/lib/auth-screen-layout";
 import { useToast } from "@/hooks/use-toast";
 import type { SportType, FitnessLevel } from "@shared/schema";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const SPORTS: { id: SportType; emoji: string; label: string; description: string }[] = [
-  { id: "running", emoji: "🏃", label: "Running", description: "Road, track, or treadmill" },
-  { id: "trail_running", emoji: "🏔️", label: "Trail Running", description: "Trails & mountain runs" },
-  { id: "cycling", emoji: "🚴", label: "Cycling", description: "Road, gravel, or MTB" },
-  { id: "swimming", emoji: "🏊", label: "Swimming", description: "Pool or open water" },
-  { id: "triathlon", emoji: "🥇", label: "Triathlon", description: "Duathlon, sprint to Ironman" },
-  { id: "open_water", emoji: "🌊", label: "Open Water", description: "Open water swim events" },
+  { id: "running", emoji: "🏃", label: "Running", description: "Road, track, trail, treadmill" },
+  { id: "cycling", emoji: "🚴", label: "Cycling", description: "Road, gravel, MTB, indoor" },
+  { id: "swimming", emoji: "🏊", label: "Swimming", description: "Pool & open water" },
+  { id: "triathlon", emoji: "🏅", label: "Triathlete", description: "Sprint through Ironman" },
 ];
 
 const LEVELS: { id: FitnessLevel; label: string; description: string }[] = [
@@ -32,6 +31,14 @@ const HOURS_OPTIONS = [
   { value: "18", label: "15+ hrs/week", sub: "High volume" },
 ];
 
+function getGoalPlaceholder(sports: SportType[]): string {
+  if (sports.includes("triathlon")) return "e.g. Ironman 70.3, Sprint Tri, Olympic Distance";
+  if (sports.includes("cycling") && sports.includes("running")) return "e.g. Marathon, Gran Fondo, Duathlon";
+  if (sports.includes("cycling")) return "e.g. Gran Fondo, Century Ride, FTP goal";
+  if (sports.includes("swimming")) return "e.g. 1-mile open water, Masters meet, CSS goal";
+  return "e.g. Boston Marathon, Sub-20 5K, First Half Marathon";
+}
+
 // ─── Step components ──────────────────────────────────────────────────────────
 
 function SportStep({
@@ -43,19 +50,19 @@ function SportStep({
 }) {
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-1">What do you train?</h2>
-      <p className="text-gray-500 text-sm mb-6">Select all that apply — your coach will be tailored to your sports</p>
-      <div className="grid grid-cols-2 gap-3">
+      <h2 className="text-2xl font-bold text-foreground mb-1">What do you train?</h2>
+      <p className="text-muted-foreground text-sm mb-4">Select all that apply — your coach will be tailored to your sports</p>
+      <div className="grid grid-cols-2 gap-2.5">
         {SPORTS.map((sport) => {
           const isSelected = selected.includes(sport.id);
           return (
             <button
               key={sport.id}
               onClick={() => { onToggle(sport.id); IOSFeedbackManager.lightImpact(); }}
-              className={`relative flex flex-col items-start p-4 rounded-2xl border-2 text-left transition-all active:scale-95 ${
+              className={`relative flex flex-col items-start rounded-2xl border-2 p-3.5 text-left transition-all active:scale-95 ${
                 isSelected
-                  ? "border-skyblue bg-blue-50"
-                  : "border-transparent bg-white shadow-sm"
+                  ? "border-skyblue bg-skyblue/10"
+                  : "border-transparent bg-surface-raised shadow-sm"
               }`}
             >
               {isSelected && (
@@ -64,8 +71,8 @@ function SportStep({
                 </div>
               )}
               <span className="text-2xl mb-2">{sport.emoji}</span>
-              <span className="font-semibold text-gray-800 text-sm">{sport.label}</span>
-              <span className="text-gray-400 text-xs mt-0.5">{sport.description}</span>
+              <span className="font-semibold text-foreground text-sm">{sport.label}</span>
+              <span className="text-muted-foreground text-xs mt-0.5">{sport.description}</span>
             </button>
           );
         })}
@@ -83,8 +90,8 @@ function LevelStep({
 }) {
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-1">Your experience level?</h2>
-      <p className="text-gray-500 text-sm mb-6">This helps your coach calibrate recommendations</p>
+      <h2 className="text-2xl font-bold text-foreground mb-1">Your experience level?</h2>
+      <p className="text-muted-foreground text-sm mb-4">This helps your coach calibrate recommendations</p>
       <div className="space-y-3">
         {LEVELS.map((level) => {
           const isSelected = selected === level.id;
@@ -94,13 +101,13 @@ function LevelStep({
               onClick={() => { onSelect(level.id); IOSFeedbackManager.lightImpact(); }}
               className={`w-full flex items-center p-4 rounded-2xl border-2 text-left transition-all active:scale-95 ${
                 isSelected
-                  ? "border-skyblue bg-blue-50"
-                  : "border-transparent bg-white shadow-sm"
+                  ? "border-skyblue bg-skyblue/10"
+                  : "border-transparent bg-surface-raised shadow-sm"
               }`}
             >
               <div className="flex-1">
-                <p className="font-semibold text-gray-800">{level.label}</p>
-                <p className="text-gray-400 text-sm">{level.description}</p>
+                <p className="font-semibold text-foreground">{level.label}</p>
+                <p className="text-muted-foreground text-sm">{level.description}</p>
               </div>
               {isSelected && (
                 <div className="w-6 h-6 bg-skyblue rounded-full flex items-center justify-center ml-3 flex-shrink-0">
@@ -124,8 +131,8 @@ function HoursStep({
 }) {
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-1">Training time per week?</h2>
-      <p className="text-gray-500 text-sm mb-6">Across all sports combined — your plan will respect this</p>
+      <h2 className="text-2xl font-bold text-foreground mb-1">Training time per week?</h2>
+      <p className="text-muted-foreground text-sm mb-4">Across all sports combined — your plan will respect this</p>
       <div className="space-y-3">
         {HOURS_OPTIONS.map((opt) => {
           const isSelected = selected === opt.value;
@@ -135,13 +142,13 @@ function HoursStep({
               onClick={() => { onSelect(opt.value); IOSFeedbackManager.lightImpact(); }}
               className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 text-left transition-all active:scale-95 ${
                 isSelected
-                  ? "border-skyblue bg-blue-50"
-                  : "border-transparent bg-white shadow-sm"
+                  ? "border-skyblue bg-skyblue/10"
+                  : "border-transparent bg-surface-raised shadow-sm"
               }`}
             >
               <div>
-                <p className="font-semibold text-gray-800">{opt.label}</p>
-                <p className="text-gray-400 text-sm">{opt.sub}</p>
+                <p className="font-semibold text-foreground">{opt.label}</p>
+                <p className="text-muted-foreground text-sm">{opt.sub}</p>
               </div>
               {isSelected && (
                 <div className="w-6 h-6 bg-skyblue rounded-full flex items-center justify-center flex-shrink-0">
@@ -161,40 +168,42 @@ function GoalStep({
   onChange,
   goalDate,
   onDateChange,
+  placeholder,
 }: {
   goal: string;
   onChange: (v: string) => void;
   goalDate: string;
   onDateChange: (v: string) => void;
+  placeholder: string;
 }) {
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-1">What's your goal?</h2>
-      <p className="text-gray-500 text-sm mb-6">Optional — give your coach a target to work toward</p>
+      <h2 className="text-2xl font-bold text-foreground mb-1">What's your goal?</h2>
+      <p className="text-muted-foreground text-sm mb-4">Optional — give your coach a target to work toward</p>
       <div className="space-y-4">
         <div>
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
             Target Event or Race
           </label>
           <input
             value={goal}
             onChange={(e) => onChange(e.target.value)}
-            placeholder="e.g. Boston Marathon, Ironman 70.3, Sub-20 5K"
-            className="w-full bg-white rounded-2xl px-4 py-4 text-sm text-gray-800 placeholder-gray-400 outline-none border border-transparent focus:border-skyblue transition-colors shadow-sm"
+            placeholder={placeholder}
+            className="w-full bg-surface-raised rounded-2xl px-4 py-4 text-sm text-foreground placeholder-muted-foreground outline-none border border-transparent focus:border-skyblue transition-colors shadow-sm"
           />
         </div>
         <div>
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
             Event Date (optional)
           </label>
           <input
             type="date"
             value={goalDate}
             onChange={(e) => onDateChange(e.target.value)}
-            className="w-full bg-white rounded-2xl px-4 py-4 text-sm text-gray-800 outline-none border border-transparent focus:border-skyblue transition-colors shadow-sm"
+            className="w-full bg-surface-raised rounded-2xl px-4 py-4 text-sm text-foreground outline-none border border-transparent focus:border-skyblue transition-colors shadow-sm"
           />
         </div>
-        <p className="text-xs text-gray-400 text-center">
+        <p className="text-xs text-muted-foreground text-center">
           You can always update this in Settings. Your coach will ask clarifying questions too.
         </p>
       </div>
@@ -223,6 +232,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
   const STEPS = 4;
   const progress = ((step + 1) / STEPS) * 100;
+  const goalPlaceholder = useMemo(() => getGoalPlaceholder(sports), [sports]);
 
   const toggleSport = (s: SportType) => {
     setSports((prev) =>
@@ -230,42 +240,23 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     );
   };
 
-  const canAdvance = () => {
-    if (step === 0) return sports.length > 0;
-    return true;
-  };
-
   const getStepError = () => {
     if (step === 0 && sports.length === 0) return "Pick at least one sport to continue.";
     return null;
   };
 
-  const handleNext = async () => {
-    const err = getStepError();
-    if (err) {
-      setStepError(err);
-      await IOSFeedbackManager.errorNotification();
-      return;
-    }
-    setStepError(null);
-
-    if (step < STEPS - 1) {
-      await IOSFeedbackManager.mediumImpact();
-      setStep((s) => s + 1);
-      return;
-    }
-
-    // Final step — save profile
+  const saveProfile = async (overrideGoal?: string) => {
     setSaving(true);
     await IOSFeedbackManager.mediumImpact();
     try {
       const primarySport = sports.includes("triathlon") ? "triathlon" : sports[0];
+      const finalGoal = overrideGoal !== undefined ? overrideGoal : goal;
       await apiRequest("PUT", "/api/profile", {
         sports,
         primarySport,
         fitnessLevel: level,
         weeklyHoursGoal: hours,
-        targetRace: goal || undefined,
+        targetRace: finalGoal || undefined,
         targetRaceDate: goalDate || undefined,
         onboardingComplete: true,
       });
@@ -284,39 +275,67 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     }
   };
 
+  const handleNext = async () => {
+    const err = getStepError();
+    if (err) {
+      setStepError(err);
+      await IOSFeedbackManager.errorNotification();
+      return;
+    }
+    setStepError(null);
+
+    if (step < STEPS - 1) {
+      await IOSFeedbackManager.mediumImpact();
+      setStep((s) => s + 1);
+      return;
+    }
+
+    await saveProfile();
+  };
+
+  const goBack = () => {
+    setStepError(null);
+    setStep((s) => Math.max(0, s - 1));
+    void IOSFeedbackManager.lightImpact();
+  };
+
   return (
-    <div className="min-h-screen bg-ivory flex flex-col px-6 pt-12 pb-10">
-      {/* Progress bar */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-gray-400 font-medium">Step {step + 1} of {STEPS}</span>
-          {step > 0 && (
-            <button
-              onClick={() => setStep((s) => s - 1)}
-              className="text-xs text-gray-400 font-medium active:text-skyblue"
-            >
-              ← Back
-            </button>
-          )}
-        </div>
-        <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+    <div
+      className="flex h-full min-h-0 flex-col overflow-hidden bg-surface px-6 overscroll-none"
+      style={{ paddingTop: SCREEN_EDGE_PADDING_TOP }}
+    >
+      <header className="mb-4 shrink-0">
+        <p className="mb-2 text-xs font-medium text-muted-foreground">
+          Step {step + 1} of {STEPS}
+        </p>
+        <div className="h-1.5 overflow-hidden rounded-full bg-border">
           <motion.div
-            className="h-full bg-skyblue rounded-full"
+            className="h-full rounded-full bg-skyblue"
             animate={{ width: `${progress}%` }}
             transition={{ duration: 0.3 }}
           />
         </div>
-      </div>
+      </header>
 
-      {/* Step content */}
-      <div className="flex-1">
+      <div
+        className={
+          step === STEPS - 1
+            ? "min-h-0 flex-1 overflow-y-auto overflow-x-hidden [-webkit-overflow-scrolling:touch]"
+            : "flex min-h-0 flex-1 flex-col overflow-hidden"
+        }
+      >
         <AnimatePresence mode="wait">
           <motion.div
             key={step}
-            initial={{ opacity: 0, x: 20 }}
+            initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
+            exit={{ opacity: 0, x: -16 }}
             transition={{ duration: 0.2 }}
+            className={
+              step === STEPS - 1
+                ? "pb-4"
+                : "flex min-h-0 flex-1 flex-col justify-center"
+            }
           >
             {step === 0 && <SportStep selected={sports} onToggle={toggleSport} />}
             {step === 1 && <LevelStep selected={level} onSelect={setLevel} />}
@@ -327,39 +346,59 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 onChange={setGoal}
                 goalDate={goalDate}
                 onDateChange={setGoalDate}
+                placeholder={goalPlaceholder}
               />
             )}
           </motion.div>
         </AnimatePresence>
       </div>
 
-      {/* CTA */}
-      <div className="mt-8">
+      <footer
+        className="flex shrink-0 flex-col gap-2 pt-3"
+        style={{ paddingBottom: SCREEN_EDGE_PADDING_BOTTOM }}
+      >
         {stepError && (
-          <p className="text-red-500 text-sm text-center mb-3 font-medium">{stepError}</p>
+          <p className="text-center text-sm font-medium text-red-500">{stepError}</p>
         )}
         <button
+          type="button"
           onClick={handleNext}
           disabled={saving}
-          className="w-full bg-skyblue text-white py-4 rounded-2xl font-semibold text-base flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-40 shadow-lg"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-skyblue py-4 text-base font-semibold text-white shadow-lg transition-transform active:scale-[0.98] disabled:opacity-40"
         >
           {saving ? (
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
           ) : step === STEPS - 1 ? (
-            <>Meet Your Coach <span className="text-lg">🏃</span></>
+            <>
+              Meet Your Coach <span className="text-lg">🏃</span>
+            </>
           ) : (
-            <>Continue <ArrowRight size={18} /></>
+            <>
+              Continue <ArrowRight size={18} />
+            </>
           )}
         </button>
+        {step > 0 && (
+          <button
+            type="button"
+            onClick={goBack}
+            disabled={saving}
+            className="w-full rounded-2xl border border-border bg-transparent py-3.5 text-base font-medium text-foreground active:bg-surface-raised disabled:opacity-40"
+          >
+            Back
+          </button>
+        )}
         {step === STEPS - 1 && (
           <button
-            onClick={() => { setGoal(""); handleNext(); }}
-            className="w-full text-center text-sm text-gray-400 mt-3 py-2"
+            type="button"
+            onClick={() => saveProfile("")}
+            disabled={saving}
+            className="w-full py-2 text-center text-sm text-muted-foreground"
           >
             Skip for now
           </button>
         )}
-      </div>
+      </footer>
     </div>
   );
 }

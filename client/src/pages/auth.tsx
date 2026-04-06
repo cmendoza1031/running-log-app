@@ -1,12 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect, useLayoutEffect } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mail, Lock, User, ArrowRight, Zap } from "lucide-react";
+import { Mail, Lock, User, ArrowRight, Zap, Eye, EyeOff } from "lucide-react";
+import type { UseFormRegisterReturn } from "react-hook-form";
 import { useAuth } from "@/contexts/AuthContext";
 import { IOSFeedbackManager } from "@/lib/ios-utils";
+import {
+  AUTH_SCROLL_CONTAINER_PADDING_BOTTOM,
+  AUTH_SCROLL_CONTAINER_PADDING_TOP,
+} from "@/lib/auth-screen-layout";
 import { useToast } from "@/hooks/use-toast";
 
 const signInSchema = z.object({
@@ -26,12 +31,58 @@ type SignInForm = z.infer<typeof signInSchema>;
 type SignUpForm = z.infer<typeof signUpSchema>;
 
 const inputClass =
-  "w-full bg-white pl-11 pr-4 py-4 rounded-2xl text-gray-900 placeholder-gray-400 outline-none border border-transparent focus:border-skyblue transition-colors shadow-sm text-base";
+  "w-full bg-surface-raised pl-11 pr-4 py-4 rounded-2xl text-foreground placeholder-muted-foreground outline-none border border-transparent focus:border-skyblue transition-colors shadow-sm text-base";
+
+const passwordInputClass =
+  "w-full bg-surface-raised pl-11 pr-12 py-4 rounded-2xl text-foreground placeholder-muted-foreground outline-none border border-transparent focus:border-skyblue transition-colors shadow-sm text-base";
+
+function PasswordField({
+  registration,
+  placeholder,
+  show,
+  onToggle,
+  autoComplete = "current-password",
+}: {
+  registration: UseFormRegisterReturn;
+  placeholder: string;
+  show: boolean;
+  onToggle: () => void;
+  autoComplete?: string;
+}) {
+  return (
+    <div className="relative">
+      <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+      <input
+        {...registration}
+        type={show ? "text" : "password"}
+        placeholder={placeholder}
+        className={passwordInputClass}
+        autoCapitalize="none"
+        autoComplete={autoComplete}
+      />
+      <button
+        type="button"
+        onClick={() => {
+          void IOSFeedbackManager.lightImpact();
+          onToggle();
+        }}
+        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-xl text-muted-foreground hover:text-foreground/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-skyblue"
+        aria-label={show ? "Hide password" : "Show password"}
+        aria-pressed={show}
+      >
+        {show ? <EyeOff size={20} strokeWidth={2} aria-hidden /> : <Eye size={20} strokeWidth={2} aria-hidden />}
+      </button>
+    </div>
+  );
+}
 
 export default function AuthPage() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [loading, setLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
+  const [showSignInPassword, setShowSignInPassword] = useState(false);
+  const [showSignUpPassword, setShowSignUpPassword] = useState(false);
+  const [showSignUpConfirmPassword, setShowSignUpConfirmPassword] = useState(false);
   const [, setLocation] = useLocation();
   const { signIn, signUp, signInWithApple } = useAuth();
   const { toast } = useToast();
@@ -45,6 +96,19 @@ export default function AuthPage() {
     resolver: zodResolver(signUpSchema),
     defaultValues: { email: "", password: "", confirmPassword: "", fullName: "" },
   });
+
+  useEffect(() => {
+    setShowSignInPassword(false);
+    setShowSignUpPassword(false);
+    setShowSignUpConfirmPassword(false);
+  }, [mode]);
+
+  /* WKWebView can leave a non-zero scroll offset after keyboard focus; content then sits under the island. */
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [mode]);
 
   const handleAppleSignIn = async () => {
     setAppleLoading(true);
@@ -81,27 +145,28 @@ export default function AuthPage() {
       toast({ title: "Sign up failed", description: error, variant: "destructive" });
     } else {
       await IOSFeedbackManager.successNotification();
-      toast({
-        title: "Welcome to Vista!",
-        description: "Check your email to confirm your account, then sign in.",
-      });
+      /* Email confirmation off in Supabase → session is active; Router sends user to onboarding. */
       setMode("signin");
     }
   };
 
   return (
-    <div className="min-h-screen bg-ivory" style={{ background: '#f5f5db' }}>
+    <div
+      className="min-h-screen flex flex-col items-center justify-start px-6 bg-surface"
+      style={{
+        minHeight: "100dvh",
+        paddingBottom: AUTH_SCROLL_CONTAINER_PADDING_BOTTOM,
+        paddingTop: AUTH_SCROLL_CONTAINER_PADDING_TOP,
+      }}
+    >
       {/*
-        No overflow-y on a nested div — let the document itself scroll.
-        iOS WKWebView automatically scrolls the document to keep the focused
-        input above the keyboard. Nested scroll containers break this.
-        Large paddingBottom ensures the Terms text can scroll above the keyboard.
+        No nested overflow-y — document scroll only. WKWebView scrolls focused inputs above
+        the keyboard; extra bottom padding is safe-area + small margin only (not 40vh).
       */}
-      <div className="flex flex-col items-center justify-center px-6 py-8" style={{ minHeight: '100vh', paddingBottom: '40vh' }}>
       <div className="w-full">
         {/* Logo */}
         <motion.div
-          initial={{ opacity: 0, y: -16 }}
+          initial={{ opacity: 0, y: -6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
           className="text-center mb-8"
@@ -111,16 +176,16 @@ export default function AuthPage() {
               <Zap size={22} className="text-white" fill="white" />
             </div>
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 tracking-tight">Vista</h1>
-          <p className="text-gray-500 mt-1.5 text-base">Your personal AI running coach</p>
+          <h1 className="text-4xl font-bold text-foreground tracking-tight">Vista</h1>
+          <p className="text-muted-foreground mt-1.5 text-base">Your personal AI running coach</p>
         </motion.div>
 
         {/* Tab Toggle */}
-        <div className="w-full bg-white rounded-2xl p-1 flex mb-6 shadow-sm">
+        <div className="w-full bg-surface-raised rounded-2xl p-1 flex mb-6 shadow-sm">
           <button
             onClick={() => { setMode("signin"); IOSFeedbackManager.lightImpact(); }}
             className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${
-              mode === "signin" ? "bg-skyblue text-white shadow-sm" : "text-gray-500"
+              mode === "signin" ? "bg-skyblue text-white shadow-sm" : "text-muted-foreground"
             }`}
           >
             Sign In
@@ -128,7 +193,7 @@ export default function AuthPage() {
           <button
             onClick={() => { setMode("signup"); IOSFeedbackManager.lightImpact(); }}
             className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all ${
-              mode === "signup" ? "bg-skyblue text-white shadow-sm" : "text-gray-500"
+              mode === "signup" ? "bg-skyblue text-white shadow-sm" : "text-muted-foreground"
             }`}
           >
             Create Account
@@ -149,7 +214,7 @@ export default function AuthPage() {
               <form onSubmit={signInForm.handleSubmit(handleSignIn)} className="space-y-3">
                 <div>
                   <div className="relative">
-                    <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <input
                       {...signInForm.register("email")}
                       type="email"
@@ -165,15 +230,13 @@ export default function AuthPage() {
                 </div>
 
                 <div>
-                  <div className="relative">
-                    <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      {...signInForm.register("password")}
-                      type="password"
-                      placeholder="Password"
-                      className={inputClass}
-                    />
-                  </div>
+                  <PasswordField
+                    registration={signInForm.register("password")}
+                    placeholder="Password"
+                    show={showSignInPassword}
+                    onToggle={() => setShowSignInPassword((v) => !v)}
+                    autoComplete="current-password"
+                  />
                   {signInForm.formState.errors.password && (
                     <p className="text-red-500 text-xs mt-1 ml-2">{signInForm.formState.errors.password.message}</p>
                   )}
@@ -204,7 +267,7 @@ export default function AuthPage() {
               <form onSubmit={signUpForm.handleSubmit(handleSignUp)} className="space-y-3">
                 <div>
                   <div className="relative">
-                    <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <input
                       {...signUpForm.register("fullName")}
                       type="text"
@@ -219,7 +282,7 @@ export default function AuthPage() {
 
                 <div>
                   <div className="relative">
-                    <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <input
                       {...signUpForm.register("email")}
                       type="email"
@@ -234,30 +297,26 @@ export default function AuthPage() {
                 </div>
 
                 <div>
-                  <div className="relative">
-                    <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      {...signUpForm.register("password")}
-                      type="password"
-                      placeholder="Password (6+ characters)"
-                      className={inputClass}
-                    />
-                  </div>
+                  <PasswordField
+                    registration={signUpForm.register("password")}
+                    placeholder="Password (6+ characters)"
+                    show={showSignUpPassword}
+                    onToggle={() => setShowSignUpPassword((v) => !v)}
+                    autoComplete="new-password"
+                  />
                   {signUpForm.formState.errors.password && (
                     <p className="text-red-500 text-xs mt-1 ml-2">{signUpForm.formState.errors.password.message}</p>
                   )}
                 </div>
 
                 <div>
-                  <div className="relative">
-                    <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      {...signUpForm.register("confirmPassword")}
-                      type="password"
-                      placeholder="Confirm password"
-                      className={inputClass}
-                    />
-                  </div>
+                  <PasswordField
+                    registration={signUpForm.register("confirmPassword")}
+                    placeholder="Confirm password"
+                    show={showSignUpConfirmPassword}
+                    onToggle={() => setShowSignUpConfirmPassword((v) => !v)}
+                    autoComplete="new-password"
+                  />
                   {signUpForm.formState.errors.confirmPassword && (
                     <p className="text-red-500 text-xs mt-1 ml-2">{signUpForm.formState.errors.confirmPassword.message}</p>
                   )}
@@ -281,9 +340,9 @@ export default function AuthPage() {
 
         {/* Divider */}
         <div className="flex items-center gap-3 w-full mt-5">
-          <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-xs text-gray-400 font-medium">or</span>
-          <div className="flex-1 h-px bg-gray-200" />
+          <div className="flex-1 h-px bg-border" />
+          <span className="text-xs text-muted-foreground font-medium">or</span>
+          <div className="flex-1 h-px bg-border" />
         </div>
 
         {/* Sign in with Apple */}
@@ -304,11 +363,10 @@ export default function AuthPage() {
           )}
         </button>
 
-        <p className="text-center text-xs text-gray-400 mt-4 px-4">
+        <p className="text-center text-xs text-muted-foreground mt-4 px-4">
           By continuing, you agree to our Terms of Service and Privacy Policy.
         </p>
-      </div>{/* my-auto inner */}
-      </div>{/* scrollable outer */}
+      </div>
     </div>
   );
 }

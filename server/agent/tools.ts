@@ -11,6 +11,20 @@ function getUserId(config?: RunnableConfig): string {
   return userId;
 }
 
+// Shared enum values used across multiple tool schemas
+const ALL_WORKOUT_TYPES = [
+  "easy", "tempo", "long", "interval", "threshold", "fartlek", "trail", "race", "recovery", "strides",
+  "easy_ride", "tempo_ride", "long_ride", "interval_ride", "hill_ride", "sweet_spot", "race_ride", "recovery_ride",
+  "easy_swim", "threshold_swim", "interval_swim", "open_water_swim", "drill", "race_swim", "css_test",
+  "brick", "transition",
+  "other",
+] as const;
+
+const ALL_WORKOUT_TYPES_WITH_REST = [...ALL_WORKOUT_TYPES, "rest"] as const;
+
+const SPORT_TYPES = ["running", "cycling", "swimming", "triathlon"] as const;
+const DISTANCE_UNITS = ["mi", "km", "yards", "meters"] as const;
+
 // ─── Profile & Stats Tools ───────────────────────────────────────────────────
 
 export const getAthleteProfile = tool(
@@ -93,19 +107,24 @@ export const searchRuns = tool(
       ? await storage.getRunsByUserIdAndDateRange(userId, input.startDate, input.endDate)
       : await storage.getRunsByUserId(userId);
 
-    const filtered = input.runType
+    let filtered = input.runType
       ? runs.filter((r) => r.runType === input.runType)
       : runs;
+
+    if (input.sportType) {
+      filtered = filtered.filter((r) => r.sportType === input.sportType);
+    }
 
     return JSON.stringify({ runs: filtered.slice(0, 30), total: filtered.length });
   },
   {
     name: "search_runs",
-    description: "Search the athlete's run history by date range and/or run type.",
+    description: "Search the athlete's activity history by date range, workout type, and/or sport type.",
     schema: z.object({
       startDate: z.string().optional().describe("YYYY-MM-DD"),
       endDate: z.string().optional().describe("YYYY-MM-DD"),
-      runType: z.enum(["easy", "tempo", "long", "interval", "trail", "threshold", "race", "recovery", "other"]).optional(),
+      runType: z.enum(ALL_WORKOUT_TYPES).optional(),
+      sportType: z.enum(SPORT_TYPES).optional().describe("Filter by sport discipline"),
     }),
   }
 );
@@ -133,8 +152,8 @@ export const logRun = tool(
     const run = await storage.createRun(
       {
         date: input.date,
-        sportType: "running",
-        distanceUnit: "mi",
+        sportType: input.sportType,
+        distanceUnit: input.distanceUnit,
         distance: String(input.distance),
         timeHours: input.timeHours ?? 0,
         timeMinutes: input.timeMinutes,
@@ -150,15 +169,17 @@ export const logRun = tool(
   },
   {
     name: "log_run",
-    description: "Create a new run log entry. Use when the athlete describes a workout they just completed.",
+    description: "Create a new activity log entry. Use when the athlete describes a workout they just completed.",
     schema: z.object({
       date: z.string().describe("YYYY-MM-DD"),
-      distance: z.number().describe("Miles"),
+      sportType: z.enum(SPORT_TYPES).default("running").describe("Sport discipline"),
+      distanceUnit: z.enum(DISTANCE_UNITS).default("mi").describe("Unit for the distance value"),
+      distance: z.number().describe("Distance in the specified unit"),
       timeHours: z.number().optional().default(0),
       timeMinutes: z.number().describe("Minutes component of total time"),
-      paceMinutes: z.number().describe("Pace minutes per mile"),
-      paceSeconds: z.number().describe("Pace seconds per mile (0-59)"),
-      runType: z.enum(["easy", "tempo", "long", "interval", "trail", "threshold", "race", "recovery", "other"]),
+      paceMinutes: z.number().describe("Pace minutes per unit"),
+      paceSeconds: z.number().describe("Pace seconds per unit (0-59)"),
+      runType: z.enum(ALL_WORKOUT_TYPES),
       notes: z.string().optional(),
       perceivedEffort: z.number().min(1).max(10).optional().describe("RPE 1-10"),
     }),
@@ -260,10 +281,10 @@ export const createTrainingPlan = tool(
           days: z.array(
             z.object({
               date: z.string().describe("YYYY-MM-DD"),
-              workoutType: z.enum(["easy", "tempo", "long", "interval", "trail", "threshold", "race", "recovery", "rest", "other"]),
+              workoutType: z.enum(ALL_WORKOUT_TYPES_WITH_REST),
               title: z.string().describe("e.g. 'Easy 5 miles', 'Tempo 4x1 mile'"),
               description: z.string().optional().describe("Detailed instructions"),
-              targetDistance: z.number().optional().describe("Miles"),
+              targetDistance: z.number().optional().describe("Distance in primary unit"),
               targetPaceMin: z.number().optional(),
               targetPaceSec: z.number().optional(),
               targetDurationMinutes: z.number().optional(),
@@ -298,7 +319,7 @@ export const updatePlanWorkout = tool(
       workoutId: z.string().describe("UUID of the plan workout to update"),
       title: z.string().optional(),
       description: z.string().optional(),
-      workoutType: z.enum(["easy", "tempo", "long", "interval", "trail", "threshold", "race", "recovery", "rest", "other"]).optional(),
+      workoutType: z.enum(ALL_WORKOUT_TYPES_WITH_REST).optional(),
       targetDistance: z.number().optional(),
       targetPaceMin: z.number().optional(),
       targetPaceSec: z.number().optional(),
@@ -356,7 +377,7 @@ export const addWorkoutToPlan = tool(
     description: "Add a single workout to the athlete's active training plan calendar.",
     schema: z.object({
       date: z.string().describe("YYYY-MM-DD"),
-      workoutType: z.enum(["easy", "tempo", "long", "interval", "trail", "threshold", "race", "recovery", "other"]),
+      workoutType: z.enum(ALL_WORKOUT_TYPES),
       title: z.string(),
       description: z.string().optional(),
       targetDistance: z.number().optional(),
@@ -370,11 +391,19 @@ export const addWorkoutToPlan = tool(
 // ─── Analytics Tools ─────────────────────────────────────────────────────────
 
 export const calculateFitnessMetrics = tool(
-  async (_input, config) => {
+  async (input, config) => {
     const userId = getUserId(config);
-    const runs = await storage.getRunsByUserIdRecent(userId, 42); // 6 weeks
+    const allRuns = await storage.getRunsByUserIdRecent(userId, 42); // 6 weeks
 
-    if (!runs.length) return JSON.stringify({ message: "Not enough data to calculate metrics." });
+    if (!allRuns.length) return JSON.stringify({ message: "Not enough data to calculate metrics." });
+
+    const runs = input.sportType
+      ? allRuns.filter((r) => r.sportType === input.sportType)
+      : allRuns;
+
+    if (!runs.length) {
+      return JSON.stringify({ message: `No ${input.sportType} activities in the last 6 weeks.` });
+    }
 
     // Weekly mileage breakdown
     const weeklyMileage: Record<string, number> = {};
@@ -406,20 +435,47 @@ export const calculateFitnessMetrics = tool(
     const typeCount: Record<string, number> = {};
     runs.forEach((r) => { typeCount[r.runType] = (typeCount[r.runType] || 0) + 1; });
 
-    const easyPct = ((typeCount.easy || 0) + (typeCount.recovery || 0)) / runs.length * 100;
+    const easyPct = ((typeCount.easy || 0) + (typeCount.recovery || 0) +
+      (typeCount.easy_ride || 0) + (typeCount.recovery_ride || 0) +
+      (typeCount.easy_swim || 0)) / runs.length * 100;
+
+    // Sport-specific metrics
+    const sportNotes: string[] = [];
+
+    if (!input.sportType || input.sportType === "swimming") {
+      const swimRuns = runs.filter((r) => r.sportType === "swimming");
+      if (swimRuns.length) {
+        const totalYards = swimRuns
+          .filter((r) => r.distanceUnit === "yards" || r.distanceUnit === "meters")
+          .reduce((s, r) => s + parseFloat(r.distance), 0);
+        if (totalYards > 0) {
+          sportNotes.push(`Swimming: ${totalYards.toFixed(0)} total yards/meters across ${swimRuns.length} sessions`);
+        }
+      }
+    }
+
+    if (!input.sportType || input.sportType === "cycling") {
+      const cycleRuns = runs.filter((r) => r.sportType === "cycling");
+      if (cycleRuns.length) {
+        const totalHours = cycleRuns.reduce((s, r) => s + r.timeHours + r.timeMinutes / 60, 0);
+        sportNotes.push(`Cycling: ${totalHours.toFixed(1)} hours in the saddle across ${cycleRuns.length} rides`);
+      }
+    }
 
     return JSON.stringify({
       period: "Last 6 weeks",
+      sportFilter: input.sportType ?? "all",
       totalRuns: runs.length,
       avgWeeklyMileage: avgWeeklyMileage.toFixed(1),
       weeklyMileage,
-      pacetrend: avgPaceRecent && avgPaceOlder ? {
+      paceTrend: avgPaceRecent && avgPaceOlder ? {
         recent2Weeks: `${Math.floor(avgPaceRecent)}:${String(Math.round((avgPaceRecent % 1) * 60)).padStart(2, "0")}`,
         previous2Weeks: `${Math.floor(avgPaceOlder)}:${String(Math.round((avgPaceOlder % 1) * 60)).padStart(2, "0")}`,
         improving: avgPaceRecent < avgPaceOlder,
       } : null,
       runTypeDistribution: typeCount,
       easyRunPercentage: `${easyPct.toFixed(0)}%`,
+      sportSpecific: sportNotes.length ? sportNotes : undefined,
       recommendation: easyPct < 70
         ? "Your easy run percentage is below the recommended 80%. Consider slowing down on easy days to maximize aerobic adaptation."
         : "Your training intensity distribution looks healthy.",
@@ -427,8 +483,58 @@ export const calculateFitnessMetrics = tool(
   },
   {
     name: "calculate_fitness_metrics",
-    description: "Calculate training metrics including weekly mileage trends, pace trends, and intensity distribution over the last 6 weeks.",
-    schema: z.object({}),
+    description: "Calculate training metrics including weekly mileage trends, pace trends, and intensity distribution over the last 6 weeks. Optionally filter by sport.",
+    schema: z.object({
+      sportType: z.enum(SPORT_TYPES).optional().describe("Filter metrics to a single sport discipline"),
+    }),
+  }
+);
+
+// ─── Health Logging Tools ────────────────────────────────────────────────────
+
+export const getHealthLogs = tool(
+  async (input, config) => {
+    const userId = getUserId(config);
+    const logs = await storage.getHealthLogs(userId, input.days ?? 30);
+    if (!logs.length) {
+      return JSON.stringify({ message: `No health logs in the last ${input.days ?? 30} days.` });
+    }
+    return JSON.stringify({ logs, total: logs.length });
+  },
+  {
+    name: "get_health_logs",
+    description: "Fetch the athlete's recent health logs (injuries, illness, fatigue, life stress). Use to understand context before adjusting training.",
+    schema: z.object({
+      days: z.number().optional().default(30).describe("Number of days to look back (default 30)"),
+    }),
+  }
+);
+
+export const logHealthStatus = tool(
+  async (input, config) => {
+    const userId = getUserId(config);
+    const log = await storage.createHealthLog(
+      {
+        type: input.type,
+        description: input.description,
+        severity: input.severity,
+        bodyPart: input.bodyPart,
+        date: input.date,
+      },
+      userId
+    );
+    return JSON.stringify({ success: true, log });
+  },
+  {
+    name: "log_health_status",
+    description: "Log an injury, illness, fatigue, or life-stress entry. Use when the athlete reports a health issue so the coach can adapt training accordingly.",
+    schema: z.object({
+      type: z.enum(["injury", "illness", "fatigue", "life_stress"]),
+      description: z.string().describe("Details about the health issue"),
+      severity: z.number().min(1).max(5).describe("1 = minor, 5 = severe"),
+      bodyPart: z.string().optional().describe("Relevant for injuries, e.g. 'left knee', 'right achilles'"),
+      date: z.string().describe("YYYY-MM-DD"),
+    }),
   }
 );
 
@@ -447,4 +553,6 @@ export const coachTools = [
   markWorkoutComplete,
   addWorkoutToPlan,
   calculateFitnessMetrics,
+  getHealthLogs,
+  logHealthStatus,
 ];

@@ -40,7 +40,7 @@ export default function RunDayPopup({ runs, date, isOpen, onClose, onRunClick }:
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm mx-auto bg-ivory rounded-2xl">
+      <DialogContent className="max-w-sm mx-auto bg-card rounded-2xl border-border">
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold text-gray-800">
             {formatDate(date)}

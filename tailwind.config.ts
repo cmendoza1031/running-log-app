@@ -61,8 +61,12 @@ export default {
           border: "var(--sidebar-border)",
           ring: "var(--sidebar-ring)",
         },
-        // Custom colors for the running app
-        ivory: "var(--ivory)",
+        // App semantic colors (dark-first)
+        surface: {
+          DEFAULT: "var(--surface)",
+          raised: "var(--surface-raised)",
+          elevated: "var(--surface-elevated)",
+        },
         skyblue: {
           DEFAULT: "var(--sky-blue)",
           light: "var(--sky-blue-light)",

@@ -96,14 +96,18 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
           const statusMap: Record<string, string> = {
             get_recent_runs: "Analyzing your recent training...",
             get_athlete_profile: "Loading your profile...",
+            update_athlete_profile: "Updating your profile...",
             get_current_plan: "Checking your training plan...",
             create_training_plan: "Building your personalized plan...",
             calculate_fitness_metrics: "Crunching your fitness data...",
             update_plan_workout: "Updating your calendar...",
             add_workout_to_plan: "Adding to your calendar...",
+            mark_workout_complete: "Marking workout complete...",
             log_run: "Saving your run...",
             update_run_notes: "Saving your notes...",
             search_runs: "Searching your run history...",
+            get_health_logs: "Checking your health history...",
+            log_health_status: "Logging your health status...",
           };
           sendEvent({
             type: "tool_start",

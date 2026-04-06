@@ -53,7 +53,7 @@ function MessageBubble({ message }: { message: Message }) {
             {message.toolStatuses.map((status, i) => (
               <div
                 key={i}
-                className="flex items-center gap-1.5 bg-blue-50 text-skyblue text-xs px-3 py-1.5 rounded-xl"
+                className="flex items-center gap-1.5 bg-skyblue/10 text-skyblue text-xs px-3 py-1.5 rounded-xl"
               >
                 <Loader2 size={10} className="animate-spin" />
                 {status}
@@ -66,13 +66,13 @@ function MessageBubble({ message }: { message: Message }) {
           className={`px-4 py-3 rounded-2xl shadow-sm ${
             isUser
               ? "bg-skyblue text-white rounded-br-md"
-              : "bg-white text-gray-800 rounded-bl-md"
+              : "bg-surface-raised text-foreground rounded-bl-md"
           }`}
         >
           {isUser ? (
             <p className="text-sm leading-relaxed">{message.content}</p>
           ) : (
-            <div className="text-sm leading-relaxed prose prose-sm max-w-none prose-p:my-1 prose-headings:mt-3 prose-headings:mb-1 prose-li:my-0.5 prose-code:bg-blue-50 prose-code:text-blue-700 prose-code:px-1 prose-code:rounded prose-table:text-xs">
+            <div className="text-sm leading-relaxed prose prose-sm max-w-none prose-p:my-1 prose-headings:mt-3 prose-headings:mb-1 prose-li:my-0.5 prose-code:bg-skyblue/10 prose-code:text-blue-700 prose-code:px-1 prose-code:rounded prose-table:text-xs">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {message.content}
               </ReactMarkdown>
@@ -100,7 +100,7 @@ function TypingIndicator() {
       <div className="w-8 h-8 rounded-2xl bg-gradient-to-br from-skyblue to-blue-600 flex items-center justify-center mr-2 flex-shrink-0 shadow-sm">
         <Bot size={14} className="text-white" />
       </div>
-      <div className="bg-white rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
+      <div className="bg-surface-raised rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
         <div className="flex gap-1 items-center h-4">
           {[0, 0.15, 0.3].map((delay, i) => (
             <div
@@ -296,12 +296,12 @@ export default function CoachPage() {
   const isEmptyChat = messages.length === 0 && !isLoadingHistory;
 
   return (
-    <div className="flex flex-col h-screen bg-ivory">
+    <div className="flex flex-col h-screen bg-surface">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-14 pb-4 bg-ivory">
+      <div className="flex items-center justify-between px-5 pt-14 pb-4 bg-surface">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Your Coach</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="text-2xl font-bold text-foreground">Your Coach</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
             {user?.user_metadata?.full_name
               ? `Training with ${user.user_metadata.full_name.split(" ")[0]}`
               : "AI-powered training guidance"}
@@ -310,7 +310,7 @@ export default function CoachPage() {
         {messages.length > 0 && (
           <button
             onClick={clearHistory}
-            className="p-2 rounded-xl text-gray-400 active:bg-gray-100 transition-colors"
+            className="p-2 rounded-xl text-muted-foreground active:bg-surface-elevated transition-colors"
           >
             <Trash2 size={18} />
           </button>
@@ -337,8 +337,8 @@ export default function CoachPage() {
             <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-skyblue to-blue-600 flex items-center justify-center shadow-lg mb-5">
               <Bot size={36} className="text-white" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-1">Your AI Coach</h2>
-            <p className="text-gray-500 text-sm text-center max-w-xs mb-8">
+            <h2 className="text-xl font-bold text-foreground mb-1">Your AI Coach</h2>
+            <p className="text-muted-foreground text-sm text-center max-w-xs mb-8">
               I have access to all your training data. Ask me anything, or I'll proactively analyze your training.
             </p>
 
@@ -348,13 +348,13 @@ export default function CoachPage() {
                 <button
                   key={text}
                   onClick={() => { sendMessage(text); IOSFeedbackManager.lightImpact(); }}
-                  className="w-full flex items-center bg-white rounded-2xl px-4 py-3.5 shadow-sm text-left active:scale-95 transition-transform"
+                  className="w-full flex items-center bg-surface-raised rounded-2xl px-4 py-3.5 shadow-sm text-left active:scale-95 transition-transform"
                 >
-                  <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center mr-3 flex-shrink-0">
+                  <div className="w-8 h-8 rounded-xl bg-skyblue/10 flex items-center justify-center mr-3 flex-shrink-0">
                     <Icon size={15} className="text-skyblue" />
                   </div>
-                  <span className="text-sm text-gray-700 font-medium flex-1">{text}</span>
-                  <ChevronRight size={14} className="text-gray-300" />
+                  <span className="text-sm text-foreground/80 font-medium flex-1">{text}</span>
+                  <ChevronRight size={14} className="text-muted-foreground" />
                 </button>
               ))}
             </div>
@@ -375,8 +375,8 @@ export default function CoachPage() {
       </div>
 
       {/* Input */}
-      <div className="px-4 pb-28 pt-2 bg-ivory border-t border-gray-100">
-        <div className="flex items-end gap-2 bg-white rounded-2xl shadow-sm px-4 py-3">
+      <div className="px-4 pb-28 pt-2 bg-surface border-t border-border">
+        <div className="flex items-end gap-2 bg-surface-raised rounded-2xl shadow-sm px-4 py-3">
           <textarea
             ref={inputRef}
             value={input}
@@ -384,7 +384,7 @@ export default function CoachPage() {
             onKeyDown={handleKeyDown}
             placeholder="Ask your coach anything..."
             rows={1}
-            className="flex-1 resize-none bg-transparent text-gray-900 placeholder-gray-400 text-sm outline-none leading-relaxed max-h-28"
+            className="flex-1 resize-none bg-transparent text-foreground placeholder-muted-foreground text-sm outline-none leading-relaxed max-h-28"
             style={{ fieldSizing: "content" } as React.CSSProperties}
           />
           <button

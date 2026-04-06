@@ -16,7 +16,7 @@ const RUN_TYPE_CLASSES: Record<string, string> = {
   threshold: "run-type-threshold",
   race: "run-type-race",
   recovery: "bg-gradient-to-br from-teal-50 to-teal-100",
-  other: "bg-gradient-to-br from-gray-100 to-gray-200",
+  other: "bg-gradient-to-br from-surface-elevated to-border",
 };
 
 const PLAN_WORKOUT_DOT: Record<string, string> = {
@@ -109,12 +109,12 @@ export default function Journey() {
     return (
       <div className="px-6 pt-14">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-semibold text-gray-800 mb-2">Journey</h1>
+          <h1 className="text-3xl font-semibold text-foreground mb-2">Journey</h1>
           <p className="text-skyblue text-lg font-medium">Monthly Progress</p>
         </div>
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 animate-pulse">
-          <div className="h-8 bg-gray-200 rounded mb-4" />
-          <div className="h-64 bg-gray-200 rounded" />
+        <div className="bg-surface-raised rounded-2xl shadow-lg p-6 mb-6 animate-pulse">
+          <div className="h-8 bg-border rounded mb-4" />
+          <div className="h-64 bg-border rounded" />
         </div>
       </div>
     );
@@ -124,17 +124,17 @@ export default function Journey() {
     <div className="px-5 pb-28" data-testid="journey-page">
       {/* Header */}
       <div className="pt-14 pb-4">
-        <h1 className="text-2xl font-bold text-gray-900" data-testid="text-page-title">Journey</h1>
+        <h1 className="text-2xl font-bold text-foreground" data-testid="text-page-title">Journey</h1>
         <p className="text-skyblue text-sm font-medium mt-0.5" data-testid="text-page-subtitle">Monthly Progress</p>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm p-5 mb-4">
+      <div className="bg-surface-raised rounded-2xl shadow-sm p-5 mb-4">
         {/* Miles stat */}
         <div className="text-center mb-5">
           <div className="text-4xl font-bold text-skyblue" data-testid="text-monthly-miles">
             {monthlyMiles.toFixed(1)}
           </div>
-          <div className="text-gray-500 text-sm">Miles this month</div>
+          <div className="text-muted-foreground text-sm">Miles this month</div>
         </div>
 
         {/* Calendar navigation */}
@@ -142,7 +142,7 @@ export default function Journey() {
           <button className="p-2 text-skyblue active:scale-90 transition-transform" onClick={() => navigateMonth("prev")} data-testid="button-prev-month">
             <ChevronLeft size={20} />
           </button>
-          <h3 className="text-base font-semibold text-gray-800" data-testid="text-current-month">
+          <h3 className="text-base font-semibold text-foreground" data-testid="text-current-month">
             {monthNames[currentMonth - 1]} {currentYear}
           </h3>
           <button className="p-2 text-skyblue active:scale-90 transition-transform" onClick={() => navigateMonth("next")} data-testid="button-next-month">
@@ -153,7 +153,7 @@ export default function Journey() {
         {/* Day headers */}
         <div className="grid grid-cols-7 gap-1 mb-1">
           {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
-            <div key={i} className="text-center text-xs text-gray-400 py-1">{d}</div>
+            <div key={i} className="text-center text-xs text-muted-foreground py-1">{d}</div>
           ))}
         </div>
 
@@ -175,7 +175,7 @@ export default function Journey() {
               <div
                 key={day}
                 className={`relative h-12 flex flex-col items-center justify-center text-sm rounded-xl cursor-pointer active:scale-90 transition-all ${
-                  hasRun ? (RUN_TYPE_CLASSES[runType!] ?? "bg-gray-100") : "hover:bg-gray-50"
+                  hasRun ? (RUN_TYPE_CLASSES[runType!] ?? "bg-surface-elevated") : "hover:bg-surface-raised"
                 } ${isToday ? "ring-2 ring-skyblue ring-offset-1" : ""}`}
                 onClick={() => {
                   if (hasRun) handleDayClick(dateStr, dayRuns);
@@ -183,7 +183,7 @@ export default function Journey() {
                 }}
                 data-testid={`calendar-day-${day}`}
               >
-                <span className={`text-xs font-semibold ${isToday ? "text-skyblue" : hasRun ? "text-gray-700" : "text-gray-400"}`}>
+                <span className={`text-xs font-semibold ${isToday ? "text-skyblue" : hasRun ? "text-foreground/80" : "text-muted-foreground"}`}>
                   {day}
                 </span>
                 {/* Plan workout indicator (when no actual run logged yet) */}
@@ -192,8 +192,8 @@ export default function Journey() {
                 )}
                 {/* Multiple runs indicator */}
                 {dayRuns.length > 1 && (
-                  <div className="absolute top-1 right-1 w-3.5 h-3.5 bg-white/80 rounded-full flex items-center justify-center">
-                    <span className="text-[8px] font-bold text-gray-700">{dayRuns.length}</span>
+                  <div className="absolute top-1 right-1 w-3.5 h-3.5 bg-surface-raised/80 rounded-full flex items-center justify-center">
+                    <span className="text-[8px] font-bold text-foreground/80">{dayRuns.length}</span>
                   </div>
                 )}
               </div>
@@ -203,8 +203,8 @@ export default function Journey() {
       </div>
 
       {/* Legend */}
-      <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Run Types</h4>
+      <div className="bg-surface-raised rounded-xl p-4 shadow-sm mb-4">
+        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Run Types</h4>
         <div className="grid grid-cols-2 gap-2">
           {[
             { key: "easy", label: "Easy" },
@@ -218,14 +218,14 @@ export default function Journey() {
           ].map(({ key, label }) => (
             <div key={key} className="flex items-center gap-2">
               <div className={`w-3 h-3 rounded-full ${PLAN_WORKOUT_DOT[key]}`} />
-              <span className="text-xs text-gray-600">{label}</span>
+              <span className="text-xs text-muted-foreground">{label}</span>
             </div>
           ))}
         </div>
         {planWorkouts.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-gray-50 flex items-center gap-2">
+          <div className="mt-2 pt-2 border-t border-border flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-gray-300 opacity-60" />
-            <span className="text-xs text-gray-500">Planned workout (not yet logged)</span>
+            <span className="text-xs text-muted-foreground">Planned workout (not yet logged)</span>
           </div>
         )}
       </div>

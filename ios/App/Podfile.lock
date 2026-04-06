@@ -1,21 +1,24 @@
 PODS:
-  - Capacitor (7.4.2):
+  - Capacitor (7.6.1):
     - CapacitorCordova
-  - CapacitorApp (7.0.2):
+  - CapacitorApp (7.1.2):
     - Capacitor
-  - CapacitorCordova (7.4.2)
-  - CapacitorDevice (7.0.2):
+  - CapacitorCommunityAppleSignIn (7.1.0):
     - Capacitor
-  - CapacitorHaptics (7.0.2):
+  - CapacitorCordova (7.6.1)
+  - CapacitorDevice (7.0.5):
     - Capacitor
-  - CapacitorSplashScreen (7.0.2):
+  - CapacitorHaptics (7.0.5):
     - Capacitor
-  - CapacitorStatusBar (7.0.2):
+  - CapacitorSplashScreen (7.0.5):
+    - Capacitor
+  - CapacitorStatusBar (7.0.6):
     - Capacitor
 
 DEPENDENCIES:
   - "Capacitor (from `../../node_modules/@capacitor/ios`)"
   - "CapacitorApp (from `../../node_modules/@capacitor/app`)"
+  - "CapacitorCommunityAppleSignIn (from `../../node_modules/@capacitor-community/apple-sign-in`)"
   - "CapacitorCordova (from `../../node_modules/@capacitor/ios`)"
   - "CapacitorDevice (from `../../node_modules/@capacitor/device`)"
   - "CapacitorHaptics (from `../../node_modules/@capacitor/haptics`)"
@@ -27,6 +30,8 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/ios"
   CapacitorApp:
     :path: "../../node_modules/@capacitor/app"
+  CapacitorCommunityAppleSignIn:
+    :path: "../../node_modules/@capacitor-community/apple-sign-in"
   CapacitorCordova:
     :path: "../../node_modules/@capacitor/ios"
   CapacitorDevice:
@@ -39,14 +44,15 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/status-bar"
 
 SPEC CHECKSUMS:
-  Capacitor: 9d9e481b79ffaeacaf7a85d6a11adec32bd33b59
-  CapacitorApp: 1f6922c9c5c8b1c538d7fbe92ebe44a81b34bed3
-  CapacitorCordova: 5e58d04631bc5094894ac106e2bf1da18a9e6151
-  CapacitorDevice: 81ae78d5d1942707caad79276badd458bf6ec603
-  CapacitorHaptics: b3fb2869e72c4466e18ce9ccbeb60a3d8723b3d4
-  CapacitorSplashScreen: 157947576b59d913792063a8d442a79e6d283ee5
-  CapacitorStatusBar: e04d05e121d5a5979c29eb4249186a4e4a84cacb
+  Capacitor: b8dd0e1151c953171b0e02d04aa57f3389edcd97
+  CapacitorApp: f01a913211780e0718dae9750442c3e23f96e106
+  CapacitorCommunityAppleSignIn: 271cb2860576fd2961508bbfa7a82117d93eadca
+  CapacitorCordova: 6ab7337f25a2c9ce7a3fdc2f249c480f447853e0
+  CapacitorDevice: ba96f933a2cb5dcdc68187503d48f7b5aa11ba9e
+  CapacitorHaptics: 1b145fa83c622e5383a3bac04ea81e2514f0b0f5
+  CapacitorSplashScreen: 409eeaaeac603d264f209c0fcb718aa22fe1f7bb
+  CapacitorStatusBar: 416e9e53fd6397e668d4a181cd2131617d949bd6
 
-PODFILE CHECKSUM: f8ec6da0ca5e700ce90a187b3878adeefc642856
+PODFILE CHECKSUM: 4b9a215dcf1b6fe41949bcceb4901803de0ad775
 
 COCOAPODS: 1.16.2

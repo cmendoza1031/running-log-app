@@ -1,7 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { StatusBar, Style } from '@capacitor/status-bar';
-import { SplashScreen } from '@capacitor/splash-screen';
 import { App } from '@capacitor/app';
 
 /**
@@ -78,26 +77,26 @@ export class IOSFeedbackManager {
 
 export class IOSStatusBarManager {
   /**
-   * Set status bar to light content (white text on dark background)
+   * Light status-bar glyphs (white) for dark app UI. Uses Capacitor `Style.Dark` (yes, the names are confusing).
    */
   static async setLightContent(): Promise<void> {
     if (!Capacitor.isNativePlatform()) return;
-    
+
     try {
-      await StatusBar.setStyle({ style: Style.Light });
+      await StatusBar.setStyle({ style: Style.Dark });
     } catch (error) {
       console.log('Status bar control unavailable:', error);
     }
   }
 
   /**
-   * Set status bar to dark content (dark text on light background)
+   * Dark status-bar glyphs for light app UI. Uses Capacitor `Style.Light`.
    */
   static async setDarkContent(): Promise<void> {
     if (!Capacitor.isNativePlatform()) return;
-    
+
     try {
-      await StatusBar.setStyle({ style: Style.Dark });
+      await StatusBar.setStyle({ style: Style.Light });
     } catch (error) {
       console.log('Status bar control unavailable:', error);
     }
@@ -138,11 +137,8 @@ export class IOSAppManager {
     if (!Capacitor.isNativePlatform()) return;
 
     try {
-      // Hide splash screen after app is ready
-      await SplashScreen.hide();
-      
-      // Set appropriate status bar style for the app
-      await IOSStatusBarManager.setDarkContent();
+      await IOSStatusBarManager.setLightContent();
+      await StatusBar.setBackgroundColor({ color: '#0a0a0f' }).catch(() => {});
       
       // Add app state change listeners
       App.addListener('appStateChange', ({ isActive }) => {

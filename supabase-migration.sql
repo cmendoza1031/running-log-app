@@ -124,6 +124,24 @@ CREATE TABLE IF NOT EXISTS fitness_integrations (
   UNIQUE(user_id, provider)
 );
 
+-- ── Health Logs (injury, illness, fatigue tracking for agent context) ────────
+CREATE TABLE IF NOT EXISTS health_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('injury','illness','fatigue','life_stress')),
+  description TEXT NOT NULL,
+  severity INTEGER NOT NULL CHECK (severity BETWEEN 1 AND 5),
+  body_part TEXT,
+  date DATE NOT NULL,
+  resolved_date DATE,
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS health_logs_user_date_idx ON health_logs(user_id, date DESC);
+ALTER TABLE health_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "health_logs_own" ON health_logs FOR ALL USING (auth.uid() = user_id);
+
 -- ── LangGraph Checkpoint Tables (created automatically by LangGraph) ───────
 -- These are created automatically by PostgresSaver.setup() but you can
 -- pre-create them here if needed:

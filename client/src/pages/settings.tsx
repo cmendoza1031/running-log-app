@@ -14,11 +14,9 @@ import type { SportType } from "@shared/schema";
 
 const SPORT_OPTIONS: { id: SportType; emoji: string; label: string }[] = [
   { id: "running", emoji: "🏃", label: "Running" },
-  { id: "trail_running", emoji: "🏔️", label: "Trail Running" },
   { id: "cycling", emoji: "🚴", label: "Cycling" },
   { id: "swimming", emoji: "🏊", label: "Swimming" },
-  { id: "triathlon", emoji: "🥇", label: "Triathlon" },
-  { id: "open_water", emoji: "🌊", label: "Open Water" },
+  { id: "triathlon", emoji: "🏅", label: "Triathlete" },
 ];
 
 interface StravaStatus {
@@ -99,24 +97,24 @@ export default function SettingsPage() {
   return (
     <div className="px-5 pb-28">
       <div className="pt-14 pb-4">
-        <h1 className="text-2xl font-bold text-gray-900">Profile</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Manage your account and integrations</p>
+        <h1 className="text-2xl font-bold text-foreground">Profile</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">Manage your account and integrations</p>
       </div>
 
       {/* Avatar & name */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-2xl p-4 mb-4 shadow-sm flex items-center gap-4"
+        className="bg-surface-raised rounded-2xl p-4 mb-4 shadow-sm flex items-center gap-4"
       >
         <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-skyblue to-blue-600 flex items-center justify-center shadow-md">
           <span className="text-white font-bold text-lg">{initials}</span>
         </div>
         <div className="flex-1">
-          <p className="font-bold text-gray-900">{profile?.fullName || "Athlete"}</p>
-          <p className="text-sm text-gray-500">{user?.email}</p>
+          <p className="font-bold text-foreground">{profile?.fullName || "Athlete"}</p>
+          <p className="text-sm text-muted-foreground">{user?.email}</p>
           {profile?.fitnessLevel && (
-            <span className="inline-block mt-1 text-xs bg-blue-50 text-skyblue px-2 py-0.5 rounded-lg font-medium capitalize">
+            <span className="inline-block mt-1 text-xs bg-skyblue/10 text-skyblue px-2 py-0.5 rounded-lg font-medium capitalize">
               {profile.fitnessLevel}
             </span>
           )}
@@ -140,9 +138,9 @@ export default function SettingsPage() {
       )}
 
       {/* Training Goals */}
-      <div className="bg-white rounded-2xl shadow-sm mb-4 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-50">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Training Goals</p>
+      <div className="bg-surface-raised rounded-2xl shadow-sm mb-4 overflow-hidden">
+        <div className="px-4 py-3 border-b border-border">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Training Goals</p>
         </div>
         <SettingsRow icon={Target} label="Target Race" value={profile?.targetRace ?? "Not set"} />
         <SettingsRow icon={Activity} label="Weekly Miles Goal" value={profile?.weeklyMileageGoal ? `${profile.weeklyMileageGoal} mi/week` : "Not set"} />
@@ -150,9 +148,9 @@ export default function SettingsPage() {
       </div>
 
       {/* Integrations */}
-      <div className="bg-white rounded-2xl shadow-sm mb-4 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-50">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Integrations</p>
+      <div className="bg-surface-raised rounded-2xl shadow-sm mb-4 overflow-hidden">
+        <div className="px-4 py-3 border-b border-border">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Integrations</p>
         </div>
 
         {/* Strava */}
@@ -162,14 +160,14 @@ export default function SettingsPage() {
               <span className="text-white font-bold text-sm">S</span>
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-gray-800 text-sm">Strava</p>
-              <p className="text-xs text-gray-500">
+              <p className="font-semibold text-foreground text-sm">Strava</p>
+              <p className="text-xs text-muted-foreground">
                 {stravaStatus?.connected
                   ? `Connected${stravaStatus.athlete ? ` · ${stravaStatus.athlete.firstname} ${stravaStatus.athlete.lastname}` : ""}`
                   : "Connect to sync Garmin, Coros, and more"}
               </p>
               {stravaStatus?.lastSynced && (
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Last synced {new Date(stravaStatus.lastSynced).toLocaleDateString()}
                 </p>
               )}
@@ -211,16 +209,16 @@ export default function SettingsPage() {
         </div>
 
         {/* Apple Health (coming soon) */}
-        <div className="px-4 py-4 border-t border-gray-50 opacity-60">
+        <div className="px-4 py-4 border-t border-border opacity-60">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-red-500 flex items-center justify-center flex-shrink-0">
               <span className="text-white text-lg">♥</span>
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-gray-800 text-sm">Apple Health</p>
-              <p className="text-xs text-gray-500">Coming soon — native iOS sync</p>
+              <p className="font-semibold text-foreground text-sm">Apple Health</p>
+              <p className="text-xs text-muted-foreground">Coming soon — native iOS sync</p>
             </div>
-            <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-lg">Soon</span>
+            <span className="text-xs bg-surface-elevated text-muted-foreground px-2 py-1 rounded-lg">Soon</span>
           </div>
         </div>
       </div>
@@ -228,13 +226,13 @@ export default function SettingsPage() {
       {/* Sign Out */}
       <button
         onClick={handleSignOut}
-        className="w-full bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3 text-red-500 active:scale-95 transition-transform mb-4"
+        className="w-full bg-surface-raised rounded-2xl p-4 shadow-sm flex items-center gap-3 text-red-500 active:scale-95 transition-transform mb-4"
       >
         <LogOut size={18} />
         <span className="font-semibold text-sm">Sign Out</span>
       </button>
 
-      <p className="text-center text-xs text-gray-400">Vista Running · v1.0</p>
+      <p className="text-center text-xs text-muted-foreground">Vista Running · v1.0</p>
     </div>
   );
 }
@@ -242,12 +240,12 @@ export default function SettingsPage() {
 function SettingsRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
   return (
     <div className="flex items-center gap-3 px-4 py-3.5">
-      <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+      <div className="w-8 h-8 rounded-xl bg-skyblue/10 flex items-center justify-center flex-shrink-0">
         <Icon size={15} className="text-skyblue" />
       </div>
       <div className="flex-1">
-        <p className="text-xs text-gray-400">{label}</p>
-        <p className="text-sm font-medium text-gray-800">{value}</p>
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-sm font-medium text-foreground">{value}</p>
       </div>
     </div>
   );
@@ -290,21 +288,21 @@ function ProfileEditForm({
       initial={{ opacity: 0, height: 0 }}
       animate={{ opacity: 1, height: "auto" }}
       exit={{ opacity: 0, height: 0 }}
-      className="bg-white rounded-2xl shadow-sm mb-4 p-4 overflow-hidden"
+      className="bg-surface-raised rounded-2xl shadow-sm mb-4 p-4 overflow-hidden"
     >
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Edit Profile</p>
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Edit Profile</p>
       <div className="space-y-3">
         <input
           value={form.fullName}
           onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))}
           placeholder="Full name"
-          className="w-full bg-gray-50 rounded-xl px-3 py-3 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-skyblue/30"
+          className="w-full bg-surface-elevated rounded-xl px-3 py-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-skyblue/30"
         />
         <input
           value={form.targetRace}
           onChange={(e) => setForm((f) => ({ ...f, targetRace: e.target.value }))}
           placeholder="Target race (e.g. Boston Marathon)"
-          className="w-full bg-gray-50 rounded-xl px-3 py-3 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-skyblue/30"
+          className="w-full bg-surface-elevated rounded-xl px-3 py-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-skyblue/30"
         />
         <div className="flex gap-2">
           <input
@@ -312,20 +310,20 @@ function ProfileEditForm({
             onChange={(e) => setForm((f) => ({ ...f, targetRaceDate: e.target.value }))}
             type="date"
             placeholder="Race date"
-            className="flex-1 bg-gray-50 rounded-xl px-3 py-3 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-skyblue/30"
+            className="flex-1 bg-surface-elevated rounded-xl px-3 py-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-skyblue/30"
           />
           <input
             value={form.weeklyMileageGoal}
             onChange={(e) => setForm((f) => ({ ...f, weeklyMileageGoal: e.target.value }))}
             type="number"
             placeholder="mi/week goal"
-            className="w-28 bg-gray-50 rounded-xl px-3 py-3 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-skyblue/30"
+            className="w-28 bg-surface-elevated rounded-xl px-3 py-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-skyblue/30"
           />
         </div>
 
         {/* Sports */}
         <div>
-          <p className="text-xs text-gray-400 mb-2 font-medium">Sports</p>
+          <p className="text-xs text-muted-foreground mb-2 font-medium">Sports</p>
           <div className="flex flex-wrap gap-2">
             {SPORT_OPTIONS.map((s) => (
               <button
@@ -334,7 +332,7 @@ function ProfileEditForm({
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
                   form.sports.includes(s.id)
                     ? "bg-skyblue text-white"
-                    : "bg-gray-100 text-gray-600"
+                    : "bg-surface-elevated text-muted-foreground"
                 }`}
               >
                 <span>{s.emoji}</span>{s.label}
@@ -345,7 +343,7 @@ function ProfileEditForm({
 
         {/* Fitness level */}
         <div>
-          <p className="text-xs text-gray-400 mb-2 font-medium">Fitness Level</p>
+          <p className="text-xs text-muted-foreground mb-2 font-medium">Fitness Level</p>
           <div className="flex gap-2 flex-wrap">
             {LEVELS.map((level) => (
               <button
@@ -354,7 +352,7 @@ function ProfileEditForm({
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold capitalize transition-colors ${
                   form.fitnessLevel === level
                     ? "bg-skyblue text-white"
-                    : "bg-gray-100 text-gray-600"
+                    : "bg-surface-elevated text-muted-foreground"
                 }`}
               >
                 {level}
@@ -382,7 +380,7 @@ function ProfileEditForm({
           </button>
           <button
             onClick={onCancel}
-            className="px-4 py-3 bg-gray-100 text-gray-600 rounded-xl text-sm font-semibold active:scale-95 transition-transform"
+            className="px-4 py-3 bg-surface-elevated text-muted-foreground rounded-xl text-sm font-semibold active:scale-95 transition-transform"
           >
             Cancel
           </button>

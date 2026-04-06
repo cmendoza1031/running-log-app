@@ -15,7 +15,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // ─── Sport constants ────────────────────────────────────────────────────────
-export const SPORT_TYPES = ["running", "cycling", "swimming", "triathlon", "duathlon", "trail_running", "open_water"] as const;
+export const SPORT_TYPES = ["running", "cycling", "swimming", "triathlon"] as const;
 export type SportType = typeof SPORT_TYPES[number];
 
 export const FITNESS_LEVELS = ["beginner", "intermediate", "advanced", "elite"] as const;
@@ -46,19 +46,19 @@ export const profiles = pgTable("profiles", {
 // ─── Activity type constants ─────────────────────────────────────────────────
 // sport → valid workout types
 export const ACTIVITY_SPORT_TYPES = {
-  running: ["easy", "tempo", "long", "interval", "threshold", "trail", "race", "recovery", "strides", "other"],
-  cycling: ["easy_ride", "tempo_ride", "long_ride", "interval_ride", "hill_ride", "race_ride", "recovery_ride", "other"],
-  swimming: ["easy_swim", "threshold_swim", "interval_swim", "open_water", "drill", "race_swim", "other"],
+  running: ["easy", "tempo", "long", "interval", "threshold", "fartlek", "trail", "race", "recovery", "strides", "other"],
+  cycling: ["easy_ride", "tempo_ride", "long_ride", "interval_ride", "hill_ride", "sweet_spot", "race_ride", "recovery_ride", "other"],
+  swimming: ["easy_swim", "threshold_swim", "interval_swim", "open_water_swim", "drill", "race_swim", "css_test", "other"],
   triathlon: ["brick", "transition", "race", "other"],
 } as const;
 
 export const ALL_WORKOUT_TYPES = [
   // Running
-  "easy", "tempo", "long", "interval", "threshold", "trail", "race", "recovery", "strides",
+  "easy", "tempo", "long", "interval", "threshold", "fartlek", "trail", "race", "recovery", "strides",
   // Cycling
-  "easy_ride", "tempo_ride", "long_ride", "interval_ride", "hill_ride", "race_ride", "recovery_ride",
+  "easy_ride", "tempo_ride", "long_ride", "interval_ride", "hill_ride", "sweet_spot", "race_ride", "recovery_ride",
   // Swimming
-  "easy_swim", "threshold_swim", "interval_swim", "open_water", "drill", "race_swim",
+  "easy_swim", "threshold_swim", "interval_swim", "open_water_swim", "drill", "race_swim", "css_test",
   // Triathlon/Multi
   "brick", "transition",
   // Universal
@@ -145,6 +145,20 @@ export const chatMessages = pgTable("chat_messages", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// ─── Health Logs (injury, illness, fatigue) ─────────────────────────────────
+export const healthLogs = pgTable("health_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull(),
+  type: text("type").notNull(), // injury | illness | fatigue | life_stress
+  description: text("description").notNull(),
+  severity: integer("severity").notNull(), // 1-5
+  bodyPart: text("body_part"), // for injuries: knee, hamstring, etc.
+  date: date("date").notNull(),
+  resolvedDate: date("resolved_date"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // ─── Fitness Integrations ───────────────────────────────────────────────────
 export const fitnessIntegrations = pgTable("fitness_integrations", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -168,7 +182,7 @@ export const insertRunSchema = createInsertSchema(runs).omit({
   createdAt: true,
   updatedAt: true,
 }).extend({
-  sportType: z.enum(["running", "cycling", "swimming", "triathlon", "duathlon", "trail_running", "open_water"]).default("running"),
+  sportType: z.enum(["running", "cycling", "swimming", "triathlon"]).default("running"),
   distanceUnit: z.enum(["mi", "km", "yards", "meters"]).optional().default("mi"),
   perceivedEffort: z.number().min(1).max(10).optional(),
   heartRateAvg: z.number().optional(),
@@ -196,6 +210,15 @@ export const insertPlanWorkoutSchema = createInsertSchema(planWorkouts).omit({
   updatedAt: true,
 });
 
+export const insertHealthLogSchema = createInsertSchema(healthLogs).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+}).extend({
+  type: z.enum(["injury", "illness", "fatigue", "life_stress"]),
+  severity: z.number().min(1).max(5),
+});
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 export type Profile = typeof profiles.$inferSelect;
 export type InsertProfile = z.infer<typeof insertProfileSchema>;
@@ -212,6 +235,9 @@ export type InsertPlanWorkout = z.infer<typeof insertPlanWorkoutSchema>;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 
 export type FitnessIntegration = typeof fitnessIntegrations.$inferSelect;
+
+export type HealthLog = typeof healthLogs.$inferSelect;
+export type InsertHealthLog = z.infer<typeof insertHealthLogSchema>;
 
 // Legacy type for backward compat
 export type User = { id: string; username: string };

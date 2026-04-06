@@ -14,7 +14,7 @@ export default function BottomNavigation() {
   const [location] = useLocation();
 
   return (
-    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 max-w-sm w-full bg-white/95 backdrop-blur-xl border-t border-gray-100 px-2 pb-safe" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
+    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 max-w-sm w-full bg-surface-raised/95 backdrop-blur-xl border-t border-border px-2 pb-safe" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
       <div className="flex justify-around items-center py-2">
         {tabs.map((tab) => {
           const isActive = location === tab.path;
@@ -37,7 +37,7 @@ export default function BottomNavigation() {
                   >
                     <Icon size={22} className="text-white" />
                   </div>
-                  <span className={`text-[10px] font-semibold ${isActive ? "text-skyblue" : "text-gray-400"}`}>
+                  <span className={`text-[10px] font-semibold ${isActive ? "text-skyblue" : "text-muted-foreground"}`}>
                     {tab.label}
                   </span>
                 </button>
@@ -50,7 +50,7 @@ export default function BottomNavigation() {
               <button
                 onClick={() => IOSFeedbackManager.lightImpact()}
                 className={`flex flex-col items-center py-2 px-3 transition-colors active:scale-90 ${
-                  isActive ? "text-skyblue" : "text-gray-400"
+                  isActive ? "text-skyblue" : "text-muted-foreground"
                 }`}
                 data-testid={`tab-${tab.label.toLowerCase()}`}
               >

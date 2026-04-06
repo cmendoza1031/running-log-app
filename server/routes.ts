@@ -5,6 +5,7 @@ import { insertRunSchema, insertProfileSchema } from "@shared/schema";
 import { authMiddleware, type AuthenticatedRequest } from "./auth/middleware";
 import { handleChatStream, getChatHistory } from "./agent/agent";
 import { buildStravaAuthUrl, exchangeStravaCode, syncStravaActivities } from "./integrations/strava";
+import { generateWorkoutFit } from "./fit-export";
 import { z } from "zod";
 import crypto from "crypto";
 
@@ -183,6 +184,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updated);
     } catch {
       res.status(500).json({ message: "Failed to complete workout" });
+    }
+  });
+
+  // ─── Workout .fit Export ───────────────────────────────────────────────────
+
+  app.get("/api/plans/workouts/:id/fit", authMiddleware, async (req, res) => {
+    try {
+      const userId = (req as AuthenticatedRequest).userId;
+      const workout = await storage.getPlanWorkoutById(req.params.id, userId);
+      if (!workout) return res.status(404).json({ message: "Workout not found" });
+
+      const fitData = generateWorkoutFit(workout);
+      const filename = workout.title.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40) + ".fit";
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(Buffer.from(fitData));
+    } catch (err) {
+      console.error("FIT export error:", err);
+      res.status(500).json({ message: "Failed to generate workout file" });
     }
   });
 

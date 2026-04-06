@@ -3,6 +3,8 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.vistarunning.app',
   appName: 'Vista Running',
+  /** Fallback if `ios.backgroundColor` is missing in copied JSON — avoids WKWebView `systemBackground`. */
+  backgroundColor: '#0a0a0f',
   webDir: 'dist/public',
   server: {
     androidScheme: 'https',
@@ -11,20 +13,21 @@ const config: CapacitorConfig = {
     cleartext: true,
   },
   ios: {
-    // 'automatic': native iOS positions the WebView below the Dynamic Island.
-    // The gap above is filled by backgroundColor (ivory), giving a seamless look.
-    // This is more reliable than 'never' + CSS env() which doesn't work on all iOS versions.
+    // 'automatic' → UIScrollView contentInsetAdjustmentBehavior.automatic. Safe area is
+    // often applied natively, so env(safe-area-inset-top) in CSS may be 0; auth UI uses a
+    // rem floor in client/src/lib/auth-screen-layout.ts to avoid content under the island.
     contentInset: 'automatic',
     scrollEnabled: true,
-    backgroundColor: '#f5f5db', // Matches --ivory: hsl(60, 56%, 91%)
+    backgroundColor: '#0a0a0f',
     scheme: 'vistarunning',
     path: 'ios'
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 2000,
+      // Simulator + live-reload can be slow; avoids native auto-hide before JS runs when server is up.
+      launchShowDuration: 6000,
       launchAutoHide: true,
-      backgroundColor: '#f5f5db',
+      backgroundColor: '#0a0a0f',
       androidSplashResourceName: 'splash',
       androidScaleType: 'CENTER_CROP',
       showSpinner: false,
@@ -32,8 +35,11 @@ const config: CapacitorConfig = {
       spinnerColor: '#4A90E2'
     },
     StatusBar: {
-      style: 'dark',
-      backgroundColor: '#f5f5db'
+      // Capacitor naming: "DARK" = light status-bar text/icons for dark app backgrounds (native .lightContent).
+      // "LIGHT" would map to .darkContent and forces the system light/ivory status bar — wrong for Vista.
+      style: 'DARK',
+      backgroundColor: '#0a0a0f',
+      overlaysWebView: true,
     },
     Haptics: {
       // Enable haptic feedback (default enabled on iOS)

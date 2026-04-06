@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import CapacitorCommunityAppleSignIn
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -7,7 +8,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // With `use_frameworks!`, community pods are dynamic frameworks. Capacitor registers
+        // plugins via NSClassFromString("SignInWithApple") from capacitor.config.json; that
+        // fails until this framework is linked. Touching the type here forces load at launch.
+        _ = SignInWithApple.self
+
+        paintVistaChromeBackground()
+        DispatchQueue.main.async { [weak self] in
+            self?.paintVistaChromeBackground()
+        }
+
         return true
     }
 
@@ -26,7 +36,24 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
-        // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
+        paintVistaChromeBackground()
+    }
+
+    /// Native layers under WKWebView (safe areas, bounce) must match `#0a0a0f` — especially if
+    /// an old `capacitor.config.json` ever pointed `ios.backgroundColor` at a light hex.
+    private func paintVistaChromeBackground() {
+        let vistaBg = UIColor(red: 10 / 255, green: 10 / 255, blue: 15 / 255, alpha: 1)
+        window?.backgroundColor = vistaBg
+        if #available(iOS 13.0, *) {
+            window?.overrideUserInterfaceStyle = .dark
+            for scene in UIApplication.shared.connectedScenes {
+                guard let ws = scene as? UIWindowScene else { continue }
+                ws.windows.forEach {
+                    $0.backgroundColor = vistaBg
+                    $0.overrideUserInterfaceStyle = .dark
+                }
+            }
+        }
     }
 
     func applicationWillTerminate(_ application: UIApplication) {

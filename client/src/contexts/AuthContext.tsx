@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { canUseNativeAppleSignIn, signInWithNativeApple } from "@/lib/native-apple-auth";
 
 interface AuthContextValue {
   user: User | null;
@@ -79,6 +80,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithApple = async () => {
+    if (canUseNativeAppleSignIn()) {
+      return signInWithNativeApple();
+    }
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "apple",
       options: { redirectTo: window.location.origin },

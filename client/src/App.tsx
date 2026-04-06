@@ -27,8 +27,8 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-ivory flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-skyblue/30 border-t-skyblue rounded-full animate-spin" />
+      <div className="flex min-h-[100dvh] items-center justify-center bg-surface">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-skyblue/30 border-t-skyblue" />
       </div>
     );
   }
@@ -44,8 +44,8 @@ function Router() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-ivory flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-skyblue/30 border-t-skyblue rounded-full animate-spin" />
+      <div className="flex min-h-[100dvh] items-center justify-center bg-surface">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-skyblue/30 border-t-skyblue" />
       </div>
     );
   }
@@ -53,7 +53,7 @@ function Router() {
   // Unauthenticated — only show auth page
   if (!user) {
     return (
-      <div className="max-w-sm mx-auto bg-ivory min-h-screen relative">
+      <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-sm flex-col bg-surface">
         <Switch>
           <Route path="/auth" component={AuthPage} />
           <Route><Redirect to="/auth" /></Route>
@@ -75,8 +75,8 @@ function AuthenticatedApp() {
 
   if (profileLoading) {
     return (
-      <div className="min-h-screen bg-ivory flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-skyblue/30 border-t-skyblue rounded-full animate-spin" />
+      <div className="flex min-h-[100dvh] items-center justify-center bg-surface">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-skyblue/30 border-t-skyblue" />
       </div>
     );
   }
@@ -84,7 +84,7 @@ function AuthenticatedApp() {
   // Show onboarding if not completed
   if (profile && !profile.onboardingComplete) {
     return (
-      <div className="max-w-sm mx-auto bg-ivory min-h-screen">
+      <div className="mx-auto flex h-[100dvh] max-h-[100dvh] w-full max-w-sm flex-col overflow-hidden bg-surface">
         <Onboarding onComplete={() => qc.invalidateQueries({ queryKey: ["/api/profile"] })} />
       </div>
     );
@@ -92,7 +92,7 @@ function AuthenticatedApp() {
 
   return (
     <div
-      className="max-w-sm mx-auto bg-ivory min-h-screen relative pb-20"
+      className="relative mx-auto min-h-[100dvh] w-full max-w-sm bg-surface pb-20"
     >
       <Switch>
         <Route path="/" component={Home} />

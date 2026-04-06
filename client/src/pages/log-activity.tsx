@@ -262,10 +262,10 @@ export default function LogActivity() {
     <div className="px-5 pb-28" data-testid="log-activity-page">
       {/* Header */}
       <div className="pt-14 pb-4">
-        <h1 className="text-2xl font-bold text-gray-900" data-testid="text-page-title">
+        <h1 className="text-2xl font-bold text-foreground" data-testid="text-page-title">
           {isEditing ? "Edit Activity" : "Log Activity"}
         </h1>
-        <p className="text-sm text-gray-500 mt-0.5" data-testid="text-page-subtitle">
+        <p className="text-sm text-muted-foreground mt-0.5" data-testid="text-page-subtitle">
           Record your workout
         </p>
       </div>
@@ -287,7 +287,7 @@ export default function LogActivity() {
               className={`flex items-center gap-1.5 px-4 py-2.5 rounded-2xl font-semibold text-sm flex-shrink-0 transition-all active:scale-95 ${
                 isSelected
                   ? "bg-skyblue text-white shadow-md"
-                  : "bg-white text-gray-600 shadow-sm"
+                  : "bg-surface-raised text-muted-foreground shadow-sm"
               }`}
             >
               <span>{cfg.emoji}</span>
@@ -300,13 +300,13 @@ export default function LogActivity() {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           {/* Distance Input */}
-          <div className="bg-white rounded-2xl p-5 shadow-sm">
+          <div className="bg-surface-raised rounded-2xl p-5 shadow-sm">
             <FormField
               control={form.control}
               name="distance"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-sm font-medium text-gray-700">Distance</FormLabel>
+                  <FormLabel className="text-sm font-medium text-foreground/80">Distance</FormLabel>
                   <div className="flex items-center space-x-3 mt-2">
                     <FormControl>
                       <Input
@@ -314,11 +314,11 @@ export default function LogActivity() {
                         type="number"
                         step="0.01"
                         placeholder="0.0"
-                        className="ios-input flex-1 bg-gray-50 border-0 rounded-xl px-4 py-3 text-lg font-medium text-center"
+                        className="ios-input flex-1 bg-surface-raised border-0 rounded-xl px-4 py-3 text-lg font-medium text-center"
                         data-testid="input-distance"
                       />
                     </FormControl>
-                    <span className="text-gray-500 font-medium text-sm">{sportConfig.distanceUnit}</span>
+                    <span className="text-muted-foreground font-medium text-sm">{sportConfig.distanceUnit}</span>
                   </div>
                   <FormMessage />
                 </FormItem>
@@ -327,38 +327,38 @@ export default function LogActivity() {
           </div>
 
           {/* Pace Input */}
-          <div className="bg-white rounded-2xl p-5 shadow-sm">
-            <FormLabel className="block text-sm font-medium text-gray-700 mb-3">Pace</FormLabel>
+          <div className="bg-surface-raised rounded-2xl p-5 shadow-sm">
+            <FormLabel className="block text-sm font-medium text-foreground/80 mb-3">Pace</FormLabel>
             <div
               onClick={() => setShowPacePopup(true)}
-              className="ios-input bg-gray-50 border-0 rounded-xl px-4 py-4 text-center cursor-pointer active:bg-gray-100 transition-colors"
+              className="ios-input bg-surface-raised border-0 rounded-xl px-4 py-4 text-center cursor-pointer active:bg-surface-elevated transition-colors"
               data-testid="input-pace-display"
             >
-              <div className="text-2xl font-semibold text-gray-800">
+              <div className="text-2xl font-semibold text-foreground">
                 {paceMinutes}:{paceSeconds.toString().padStart(2, '0')}
               </div>
-              <div className="text-sm text-gray-500 mt-1">{sportConfig.paceUnit}</div>
+              <div className="text-sm text-muted-foreground mt-1">{sportConfig.paceUnit}</div>
             </div>
           </div>
 
           {/* Time Input */}
-          <div className="bg-white rounded-2xl p-5 shadow-sm">
-            <FormLabel className="block text-sm font-medium text-gray-700 mb-3">Total Time</FormLabel>
+          <div className="bg-surface-raised rounded-2xl p-5 shadow-sm">
+            <FormLabel className="block text-sm font-medium text-foreground/80 mb-3">Total Time</FormLabel>
             <div 
               onClick={() => setShowTimePopup(true)}
-              className="ios-input bg-gray-50 border-0 rounded-xl px-4 py-4 text-center cursor-pointer active:bg-gray-100 transition-colors"
+              className="ios-input bg-surface-raised border-0 rounded-xl px-4 py-4 text-center cursor-pointer active:bg-surface-elevated transition-colors"
               data-testid="input-time-display"
             >
-              <div className="text-2xl font-semibold text-gray-800">
+              <div className="text-2xl font-semibold text-foreground">
                 {timeHours > 0 ? `${timeHours}hr ` : ''}{timeMinutes}min
               </div>
-              <div className="text-sm text-gray-500 mt-1">total time</div>
+              <div className="text-sm text-muted-foreground mt-1">total time</div>
             </div>
           </div>
 
           {/* Workout Type Selection */}
-          <div className="bg-white rounded-2xl p-5 shadow-sm">
-            <FormLabel className="block text-sm font-medium text-gray-700 mb-3">Workout Type</FormLabel>
+          <div className="bg-surface-raised rounded-2xl p-5 shadow-sm">
+            <FormLabel className="block text-sm font-medium text-foreground/80 mb-3">Workout Type</FormLabel>
             <div className="grid grid-cols-2 gap-2">
               {sportConfig.workoutTypes.map((type) => (
                 <button
@@ -370,8 +370,8 @@ export default function LogActivity() {
                   }}
                   className={`py-3 px-4 rounded-xl font-medium text-sm transition-all active:scale-95 ${
                     selectedRunType === type.value
-                      ? "bg-blue-50 border-2 border-skyblue text-skyblue"
-                      : "bg-gray-50 border-2 border-transparent text-gray-600"
+                      ? "bg-skyblue/10 border-2 border-skyblue text-skyblue"
+                      : "bg-surface-raised border-2 border-transparent text-muted-foreground"
                   }`}
                   data-testid={`button-run-type-${type.value}`}
                 >
@@ -382,19 +382,19 @@ export default function LogActivity() {
           </div>
 
           {/* Highlights/Notes */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm">
+          <div className="bg-surface-raised rounded-2xl p-6 shadow-sm">
             <FormField
               control={form.control}
               name="notes"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-sm font-medium text-gray-700">Highlight/Description of Run</FormLabel>
+                  <FormLabel className="text-sm font-medium text-foreground/80">Highlight/Description of Run</FormLabel>
                   <FormControl>
                     <Textarea
                       {...field}
                       value={field.value || ""}
                       placeholder="How did it feel? Any notes, conditions, or highlights..."
-                      className="ios-input w-full bg-gray-50 border-0 rounded-xl px-4 py-3 text-base resize-none"
+                      className="ios-input w-full bg-surface-raised border-0 rounded-xl px-4 py-3 text-base resize-none"
                       rows={4}
                       data-testid="textarea-notes"
                     />
@@ -409,7 +409,7 @@ export default function LogActivity() {
           <Button
             type="button"
             onClick={handleSave}
-            className="w-full bg-gray-100 text-gray-700 py-3 rounded-2xl font-medium text-base shadow-sm active:scale-95 transition-all duration-200 hover:bg-gray-200 mb-3"
+            className="w-full bg-surface-elevated text-foreground/80 py-3 rounded-2xl font-medium text-base shadow-sm active:scale-95 transition-all duration-200 hover:bg-border mb-3"
             data-testid="button-save-progress"
           >
             Save Progress
@@ -429,10 +429,10 @@ export default function LogActivity() {
 
       {/* Pace Popup Modal */}
       <Dialog open={showPacePopup} onOpenChange={setShowPacePopup}>
-        <DialogContent className="max-w-sm mx-auto bg-ivory rounded-2xl">
+        <DialogContent className="max-w-sm mx-auto bg-surface rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="text-xl font-semibold text-gray-800 text-center">Set Pace</DialogTitle>
-            <DialogDescription className="text-center text-gray-600">
+            <DialogTitle className="text-xl font-semibold text-foreground text-center">Set Pace</DialogTitle>
+            <DialogDescription className="text-center text-muted-foreground">
               Select your running pace per mile using the scroll wheels below.
             </DialogDescription>
           </DialogHeader>
@@ -446,12 +446,12 @@ export default function LogActivity() {
                 }}
                 min={4}
                 max={15}
-                className="bg-gray-50 rounded-xl"
+                className="bg-surface-raised rounded-xl"
                 dataTestId="scroll-pace-minutes-popup"
               />
-              <span className="text-xs text-gray-500 mt-2">min</span>
+              <span className="text-xs text-muted-foreground mt-2">min</span>
             </div>
-            <span className="text-2xl font-medium text-gray-500 pt-8">:</span>
+            <span className="text-2xl font-medium text-muted-foreground pt-8">:</span>
             <div className="flex flex-col items-center">
               <ScrollWheel
                 value={paceSeconds}
@@ -461,14 +461,14 @@ export default function LogActivity() {
                 }}
                 min={0}
                 max={59}
-                className="bg-gray-50 rounded-xl"
+                className="bg-surface-raised rounded-xl"
                 dataTestId="scroll-pace-seconds-popup"
               />
-              <span className="text-xs text-gray-500 mt-2">sec</span>
+              <span className="text-xs text-muted-foreground mt-2">sec</span>
             </div>
           </div>
           <div className="text-center">
-            <span className="text-gray-500 font-medium">per mile</span>
+            <span className="text-muted-foreground font-medium">per mile</span>
           </div>
           <Button
             onClick={() => setShowPacePopup(false)}
@@ -482,10 +482,10 @@ export default function LogActivity() {
 
       {/* Time Popup Modal */}
       <Dialog open={showTimePopup} onOpenChange={setShowTimePopup}>
-        <DialogContent className="max-w-sm mx-auto bg-ivory rounded-2xl">
+        <DialogContent className="max-w-sm mx-auto bg-surface rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="text-xl font-semibold text-gray-800 text-center">Set Total Time</DialogTitle>
-            <DialogDescription className="text-center text-gray-600">
+            <DialogTitle className="text-xl font-semibold text-foreground text-center">Set Total Time</DialogTitle>
+            <DialogDescription className="text-center text-muted-foreground">
               Set the total duration of your run using the scroll wheels below.
             </DialogDescription>
           </DialogHeader>
@@ -499,10 +499,10 @@ export default function LogActivity() {
                 }}
                 min={0}
                 max={3}
-                className="bg-gray-50 rounded-xl"
+                className="bg-surface-raised rounded-xl"
                 dataTestId="scroll-time-hours-popup"
               />
-              <span className="text-xs text-gray-500 mt-2">hr</span>
+              <span className="text-xs text-muted-foreground mt-2">hr</span>
             </div>
             <div className="flex flex-col items-center">
               <ScrollWheel
@@ -513,10 +513,10 @@ export default function LogActivity() {
                 }}
                 min={5}
                 max={180}
-                className="bg-gray-50 rounded-xl"
+                className="bg-surface-raised rounded-xl"
                 dataTestId="scroll-time-minutes-popup"
               />
-              <span className="text-xs text-gray-500 mt-2">min</span>
+              <span className="text-xs text-muted-foreground mt-2">min</span>
             </div>
           </div>
           <Button

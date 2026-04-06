@@ -18,6 +18,9 @@ import {
   type InsertPlanWorkout,
   type ChatMessage,
   type FitnessIntegration,
+  healthLogs,
+  type HealthLog,
+  type InsertHealthLog,
 } from "@shared/schema";
 
 // ─── Database Connection ─────────────────────────────────────────────────────
@@ -59,6 +62,7 @@ export interface IStorage {
   deactivateAllPlans(userId: string): Promise<void>;
 
   // Plan Workouts
+  getPlanWorkoutById(id: string, userId: string): Promise<PlanWorkout | undefined>;
   getPlanWorkouts(planId: string, userId: string): Promise<PlanWorkout[]>;
   getPlanWorkoutsByMonth(userId: string, year: number, month: number): Promise<PlanWorkout[]>;
   upsertPlanWorkout(workout: InsertPlanWorkout, userId: string): Promise<PlanWorkout>;
@@ -75,6 +79,11 @@ export interface IStorage {
   getIntegration(userId: string, provider: string): Promise<FitnessIntegration | undefined>;
   upsertIntegration(userId: string, provider: string, data: Partial<FitnessIntegration>): Promise<FitnessIntegration>;
   getAllIntegrations(userId: string): Promise<FitnessIntegration[]>;
+
+  // Health Logs
+  getHealthLogs(userId: string, days?: number): Promise<HealthLog[]>;
+  createHealthLog(data: InsertHealthLog, userId: string): Promise<HealthLog>;
+  resolveHealthLog(logId: string, resolvedDate: string, userId: string): Promise<HealthLog | undefined>;
 }
 
 // ─── Supabase-backed Storage Implementation ──────────────────────────────────
@@ -227,6 +236,14 @@ export class SupabaseStorage implements IStorage {
 
   // ── Plan Workouts ─────────────────────────────────────────────────────────
 
+  async getPlanWorkoutById(id: string, userId: string): Promise<PlanWorkout | undefined> {
+    const [workout] = await db
+      .select()
+      .from(planWorkouts)
+      .where(and(eq(planWorkouts.id, id), eq(planWorkouts.userId, userId)));
+    return workout;
+  }
+
   async getPlanWorkouts(planId: string, userId: string): Promise<PlanWorkout[]> {
     return db
       .select()
@@ -348,6 +365,39 @@ export class SupabaseStorage implements IStorage {
       .select()
       .from(fitnessIntegrations)
       .where(eq(fitnessIntegrations.userId, userId));
+  }
+  // ── Health Logs ───────────────────────────────────────────────────────────
+
+  async getHealthLogs(userId: string, days?: number): Promise<HealthLog[]> {
+    const conditions = [eq(healthLogs.userId, userId)];
+    if (days) {
+      const since = new Date();
+      since.setDate(since.getDate() - days);
+      const sinceStr = since.toISOString().split("T")[0];
+      conditions.push(gte(healthLogs.date, sinceStr));
+    }
+    return db
+      .select()
+      .from(healthLogs)
+      .where(and(...conditions))
+      .orderBy(desc(healthLogs.date));
+  }
+
+  async createHealthLog(data: InsertHealthLog, userId: string): Promise<HealthLog> {
+    const result = await db
+      .insert(healthLogs)
+      .values({ ...data, userId })
+      .returning();
+    return result[0];
+  }
+
+  async resolveHealthLog(logId: string, resolvedDate: string, userId: string): Promise<HealthLog | undefined> {
+    const result = await db
+      .update(healthLogs)
+      .set({ resolvedDate })
+      .where(and(eq(healthLogs.id, logId), eq(healthLogs.userId, userId)))
+      .returning();
+    return result[0];
   }
 }
 
