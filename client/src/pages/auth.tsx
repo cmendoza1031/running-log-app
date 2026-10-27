@@ -63,6 +63,9 @@ function PasswordField({
       />
       <button
         type="button"
+        // Keep focus in the input: on iOS a blur here re-shows the logo, shifts the layout and the tap misses.
+        onPointerDown={(e) => e.preventDefault()}
+        onMouseDown={(e) => e.preventDefault()}
         onClick={() => {
           void IOSFeedbackManager.lightImpact();
           onToggle();

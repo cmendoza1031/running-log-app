@@ -52,7 +52,7 @@ function Router() {
 }
 
 function AuthenticatedApp() {
-  const { data: profile, isLoading } = useQuery<Profile | null>({ queryKey: ["/api/profile"] });
+  const { data: profile, isLoading, isError, refetch, isFetching } = useQuery<Profile | null>({ queryKey: ["/api/profile"] });
   const qc = useQueryClient();
   const { toast } = useToast();
   useAutoSync(!!profile?.onboardingComplete);
@@ -73,6 +73,18 @@ function AuthenticatedApp() {
   }, [qc, toast]);
 
   if (isLoading) return <Spinner />;
+
+  if (isError) {
+    return (
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col items-center justify-center gap-4 bg-black px-8 text-center">
+        <div className="text-[17px] font-semibold text-ink-1">Can't reach Vista right now</div>
+        <div className="text-[14px] leading-snug text-ink-2">The server didn't respond. Check your connection and try again.</div>
+        <button type="button" onClick={() => void refetch()} disabled={isFetching} className="press rounded-xl bg-primary px-5 py-2.5 text-[15px] font-semibold text-white disabled:opacity-60">
+          {isFetching ? "Retrying…" : "Retry"}
+        </button>
+      </div>
+    );
+  }
 
   if (profile && !profile.onboardingComplete) {
     return (
