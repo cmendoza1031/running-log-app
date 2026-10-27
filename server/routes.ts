@@ -37,7 +37,11 @@ import {
   setThresholdStatus,
   todayInTz,
   deleteAllUserData,
+  listMemories,
+  archiveMemory,
+  upsertWellness,
 } from "./data";
+import { getWellness } from "./analytics/wellness";
 import { getFitness, weeklyVolume, weekStart, intensityDistribution, activityLoad, recomputeLoads } from "./analytics/load";
 import { applyThresholdInput, thresholdInputSchema, ThresholdInputError } from "./analytics/threshold-input";
 import { runThresholdDetection } from "./analytics/thresholds";
@@ -565,6 +569,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     "/api/coach/threads",
     ...auth,
     route(async (_req, res, userId) => res.json(await startNewThread(userId))),
+  );
+
+  app.get(
+    "/api/coach/memory",
+    ...auth,
+    route(async (_req, res, userId) => res.json(await listMemories(userId))),
+  );
+  app.delete(
+    "/api/coach/memory/:id",
+    ...auth,
+    route(async (req, res, userId) => {
+      if (!(await archiveMemory(userId, req.params.id))) return res.status(404).json({ message: "Note not found" });
+      res.json({ success: true });
+    }),
+  );
+
+  // ─── Wellness (Apple Health) ────────────────────────────────────────────────
+  app.post(
+    "/api/wellness",
+    ...auth,
+    route(async (req, res, userId) => {
+      const day = z.object({
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        hrvMs: z.number().positive().max(400).nullish(),
+        restingHr: z.number().int().min(25).max(150).nullish(),
+        sleepMin: z.number().int().min(0).max(1440).nullish(),
+      });
+      const { days } = z.object({ days: z.array(day).max(120) }).parse(req.body);
+      res.json({ saved: await upsertWellness(userId, days) });
+    }),
+  );
+  app.get(
+    "/api/wellness",
+    ...auth,
+    route(async (_req, res, userId) => {
+      const profile = await storage.getProfile(userId);
+      res.json(await getWellness(userId, todayInTz(profile?.timezone)));
+    }),
   );
 
   // ─── Health logs ────────────────────────────────────────────────────────────

@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useRoute } from "wouter";
-import { Watch, MessageCircle, CalendarClock, SkipForward, Undo2, Pencil, Loader2, Monitor, Trash2, CheckCircle2 } from "lucide-react";
+import { Droplets, Watch, MessageCircle, CalendarClock, SkipForward, Undo2, Pencil, Loader2, Monitor, Trash2, CheckCircle2 } from "lucide-react";
 import { formatDistance, formatDuration, type Sport } from "@shared/physiology";
 import { flattenWorkout, isValidStructure, structureToDsl, compactTime, type WorkoutStructure, type FlatStep } from "@shared/workout-structure";
+import { sessionFueling, formatRange, intensityFromTss } from "@shared/fueling";
 import type { PlanWorkout, Run } from "@/lib/types";
 import { apiJson } from "@/lib/queryClient";
-import { usePrefs, useThresholds, fmtDate, zoneColor, exportWorkoutFile, sportMeta } from "@/lib/vista";
+import { usePrefs, useProfile, useThresholds, fmtDate, zoneColor, exportWorkoutFile, sportMeta } from "@/lib/vista";
 import { PageHeader, Card, SportBadge, Stat, Pill, Sheet, PrimaryButton, Skeleton, SectionTitle } from "@/components/kit";
 import { WorkoutProfile } from "@/components/charts";
 import { ActivityRow } from "@/components/training";
@@ -44,6 +45,7 @@ export default function WorkoutPage() {
   const id = params?.id ?? "";
   const prefs = usePrefs();
   const { data: th } = useThresholds();
+  const { data: profile } = useProfile();
   const qc = useQueryClient();
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -57,6 +59,19 @@ export default function WorkoutPage() {
   const thresholds = th?.values ?? {};
   const flat = useMemo(() => (structure ? flattenWorkout(structure, thresholds, prefs) : []), [structure, thresholds, prefs]);
   const groups = useMemo(() => (structure ? groupSteps(structure, flat) : []), [structure, flat]);
+  const fueling = useMemo(() => {
+    const sec = w?.plannedDurationSec ?? 0;
+    if (!w || w.isCompleted || sec < 75 * 60 || w.sport === "swim") return null;
+    return sessionFueling(
+      { durationSec: sec, intensity: intensityFromTss(w.plannedTss, sec), sport: (w.sport as Sport | null) ?? undefined },
+      {
+        weightKg: th?.values.weightKg,
+        sweatRateMlPerH: profile?.sweatRateMlPerH,
+        sweatSodiumMgPerL: profile?.sweatSodiumMgPerL,
+        carbToleranceGPerH: profile?.carbToleranceGPerH,
+      },
+    );
+  }, [w, th, profile]);
 
   const patch = useMutation({
     mutationFn: (body: Record<string, unknown>) => apiJson<PlanWorkout>("PATCH", `/api/workouts/${id}`, body),
@@ -158,6 +173,24 @@ export default function WorkoutPage() {
             ))}
           </Card>
         </>
+      )}
+
+      {fueling && (
+        <Card className="mt-3 p-4">
+          <div className="eyebrow mb-1 flex items-center gap-1.5">
+            <Droplets size={13} /> Fueling
+          </div>
+          <div className="mt-2 grid grid-cols-3 gap-3">
+            <Stat label="Carbs" value={formatRange(fueling.carbsGPerH, "")} unit="g/h" sub={`≈ ${formatRange(fueling.totalCarbsG, "g")} total`} />
+            <Stat label="Fluid" value={formatRange(fueling.fluidMlPerH, "")} unit="ml/h" />
+            <Stat label="Sodium" value={formatRange(fueling.sodiumMgPerH, "")} unit="mg/h" />
+          </div>
+          <ul className="mt-3 space-y-1 text-[12px] leading-snug text-ink-3">
+            {fueling.notes.map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ul>
+        </Card>
       )}
 
       {data.activity && (

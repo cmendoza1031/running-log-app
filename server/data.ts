@@ -15,6 +15,9 @@ import {
   healthLogs,
   fitnessIntegrations,
   chatMessages,
+  coachMemory,
+  dailyWellness,
+  type CoachMemoryCategory,
   type Run,
   type PlanWorkout,
   type AthleteThreshold,
@@ -283,11 +286,75 @@ export async function renameThread(threadId: string, title: string) {
   await db.update(coachThreads).set({ title }).where(eq(coachThreads.id, threadId));
 }
 
+// ─── Coach memory ─────────────────────────────────────────────────────────────
+
+export async function listMemories(userId: string) {
+  return db
+    .select()
+    .from(coachMemory)
+    .where(and(eq(coachMemory.userId, userId), eq(coachMemory.archived, false)))
+    .orderBy(asc(coachMemory.category), asc(coachMemory.createdAt));
+}
+
+/** Insert a note, or replace an existing note's text when `id` is given. */
+export async function saveMemory(userId: string, m: { id?: string; category: CoachMemoryCategory; note: string }) {
+  if (m.id) {
+    const [row] = await db
+      .update(coachMemory)
+      .set({ category: m.category, note: m.note, updatedAt: new Date() })
+      .where(and(eq(coachMemory.userId, userId), eq(coachMemory.id, m.id)))
+      .returning();
+    return row;
+  }
+  const [row] = await db.insert(coachMemory).values({ userId, category: m.category, note: m.note }).returning();
+  return row;
+}
+
+export async function archiveMemory(userId: string, id: string): Promise<boolean> {
+  const rows = await db
+    .update(coachMemory)
+    .set({ archived: true, updatedAt: new Date() })
+    .where(and(eq(coachMemory.userId, userId), eq(coachMemory.id, id)))
+    .returning({ id: coachMemory.id });
+  return rows.length > 0;
+}
+
+// ─── Daily wellness ───────────────────────────────────────────────────────────
+
+export type WellnessInput = { date: string; hrvMs?: number | null; restingHr?: number | null; sleepMin?: number | null };
+
+export async function upsertWellness(userId: string, days: WellnessInput[]): Promise<number> {
+  if (!days.length) return 0;
+  await db
+    .insert(dailyWellness)
+    .values(days.map((d) => ({ userId, date: d.date, hrvMs: d.hrvMs ?? null, restingHr: d.restingHr ?? null, sleepMin: d.sleepMin ?? null })))
+    .onConflictDoUpdate({
+      target: [dailyWellness.userId, dailyWellness.date],
+      set: {
+        hrvMs: sql`excluded.hrv_ms`,
+        restingHr: sql`excluded.resting_hr`,
+        sleepMin: sql`excluded.sleep_min`,
+        updatedAt: new Date(),
+      },
+    });
+  return days.length;
+}
+
+export async function getWellnessBetween(userId: string, from: string, to: string) {
+  return db
+    .select()
+    .from(dailyWellness)
+    .where(and(eq(dailyWellness.userId, userId), gte(dailyWellness.date, from), lte(dailyWellness.date, to)))
+    .orderBy(asc(dailyWellness.date));
+}
+
 // ─── Account deletion ─────────────────────────────────────────────────────────
 
 export async function deleteAllUserData(userId: string): Promise<void> {
   await db.delete(coachMessages).where(eq(coachMessages.userId, userId));
   await db.delete(coachThreads).where(eq(coachThreads.userId, userId));
+  await db.delete(coachMemory).where(eq(coachMemory.userId, userId));
+  await db.delete(dailyWellness).where(eq(dailyWellness.userId, userId));
   await db.delete(chatMessages).where(eq(chatMessages.userId, userId));
   await db.delete(athleteThresholds).where(eq(athleteThresholds.userId, userId));
   await db.delete(planWorkouts).where(eq(planWorkouts.userId, userId));

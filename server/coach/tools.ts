@@ -12,7 +12,10 @@ import {
   formatDuration,
   formatDistance,
   formatClock,
+  racePacing,
 } from "@shared/physiology";
+import { sessionFueling, raceFueling, fuelingLine, formatRange, intensityFromTss, type FuelingProfile, type FuelingTarget } from "@shared/fueling";
+import { COACH_MEMORY_CATEGORIES } from "@shared/schema";
 import { describeWorkout, structureToDsl, WorkoutParseError, isValidStructure, type WorkoutStructure } from "@shared/workout-structure";
 import { addDays } from "@shared/training-load";
 import { WEEKLY_HOURS_BUCKETS } from "@shared/weekly-hours-bucket";
@@ -29,6 +32,8 @@ import {
   prefsFromProfile,
   todayInTz,
   getActivePlan,
+  saveMemory,
+  archiveMemory,
 } from "../data";
 import { buildOverview, activityLine, plannedLine, zonesText, thresholdsText } from "./context";
 import { describeActivityForModel } from "./analysis";
@@ -323,10 +328,10 @@ const changeWorkout = defineTool({
 const adjust = defineTool({
   name: "adjust_upcoming_training",
   description:
-    "Deterministic adaptation of the next days: ease_next_days (next 3 days: key sessions → easy aerobic at 80% duration, others −20%) or add_recovery_day (tomorrow becomes rest, the day after is eased). Use when fatigue, illness, poor sleep or life stress warrant it.",
-  schema: z.object({ action: z.enum(["ease_next_days", "add_recovery_day"]) }),
+    "Deterministic adaptation of the next days: ease_next_days (3 days: key sessions → easy aerobic at 80% duration, others −20%) or add_recovery_day (first day becomes rest, the day after is eased). The window starts TOMORROW unless include_today=true (use it when the athlete hasn't trained yet today). The result lists every changed session — report exactly those dates.",
+  schema: z.object({ action: z.enum(["ease_next_days", "add_recovery_day"]), include_today: z.boolean().optional() }),
   status: "Adjusting your week…",
-  run: async (i, ctx) => (await adaptUpcoming(ctx.userId, i.action)).summary,
+  run: async (i, ctx) => (await adaptUpcoming(ctx.userId, i.action, { includeToday: i.include_today })).summary,
 });
 
 const updateThresholds = defineTool({
@@ -385,6 +390,9 @@ const updateProfile = defineTool({
     weekly_schedule: z
       .array(z.object({ day: z.number().int().min(0).max(6).describe("0=Sun … 6=Sat"), maxMinutes: z.number().int().min(15).max(600), isLongDay: z.boolean() }))
       .optional(),
+    sweat_rate_ml_per_h: z.number().int().min(200).max(3000).optional().describe("Measured sweat rate"),
+    sweat_sodium_mg_per_l: z.number().int().min(100).max(3000).optional().describe("From a sweat test"),
+    carb_tolerance_g_per_h: z.number().int().min(20).max(150).optional().describe("Highest carb rate practised without GI issues"),
   }),
   status: "Updating your profile…",
   run: async (i, ctx) => {
@@ -398,6 +406,9 @@ const updateProfile = defineTool({
     if (i.unit_system) patch.unitSystem = i.unit_system;
     if (i.pool_unit) patch.poolUnit = i.pool_unit;
     if (i.weekly_schedule) patch.weeklySchedule = i.weekly_schedule;
+    if (i.sweat_rate_ml_per_h) patch.sweatRateMlPerH = i.sweat_rate_ml_per_h;
+    if (i.sweat_sodium_mg_per_l) patch.sweatSodiumMgPerL = i.sweat_sodium_mg_per_l;
+    if (i.carb_tolerance_g_per_h) patch.carbToleranceGPerH = i.carb_tolerance_g_per_h;
     await storage.upsertProfile(ctx.userId, patch as never);
     return `Profile updated: ${Object.keys(patch).join(", ")}.`;
   },
@@ -428,6 +439,100 @@ const resolveHealth = defineTool({
   run: async (i, ctx) => ((await storage.resolveHealthLog(i.id, i.date, ctx.userId)) ? "Resolved." : "ERROR: not found."),
 });
 
+const remember = defineTool({
+  name: "remember",
+  description:
+    "Save a durable fact about the athlete to long-term memory (shown in every future conversation under COACH NOTES). Use for things that stay true for weeks or more: injury history and triggers, preferences (e.g. hates treadmill, swims masters Tue/Thu), life constraints (job, kids, travel pattern), goals and motivations, past race results, equipment (power meter, pool access, trainer). Do NOT save daily state (today's soreness → log_health_status) or anything already in the profile/thresholds. To correct a note, pass its id.",
+  schema: z.object({
+    id: z.string().optional().describe("Existing note id to replace"),
+    category: z.enum(COACH_MEMORY_CATEGORIES),
+    note: z.string().min(3).max(400).describe("One self-contained fact, written in third person, with dates where relevant"),
+  }),
+  status: "Making a note…",
+  run: async (i, ctx) => {
+    const row = await saveMemory(ctx.userId, { id: i.id, category: i.category, note: i.note });
+    return row ? `Saved [${row.id}].` : "ERROR: note not found.";
+  },
+});
+
+const forget = defineTool({
+  name: "forget",
+  description: "Remove a long-term memory note that is no longer true (e.g. an injury fully healed months ago, a changed schedule).",
+  schema: z.object({ id: z.string() }),
+  status: "Updating notes…",
+  run: async (i, ctx) => ((await archiveMemory(ctx.userId, i.id)) ? "Removed." : "ERROR: not found."),
+});
+
+function fuelingTargetText(label: string, t: FuelingTarget): string {
+  return `${label}: ${fuelingLine(t)}${t.notes.length ? `\n  - ${t.notes.join("\n  - ")}` : ""}`;
+}
+
+const getFueling = defineTool({
+  name: "get_fueling_plan",
+  description:
+    "Carb (g/h), fluid (ml/h) and sodium (mg/h) targets from the fueling model (Jeukendrup/ACSM), personalised by weight, sweat rate, sweat sodium and practised carb tolerance when known. Modes: a planned workout (workout_id), an ad-hoc session (sport + duration_min [+ intensity]), or race day (race=true: carb load, breakfast, per-leg plan from the goal race and current race-pace model; override leg_minutes if the athlete gives expected splits). Quote these numbers; don't invent your own.",
+  schema: z.object({
+    workout_id: z.string().optional(),
+    sport: SPORT.optional(),
+    duration_min: z.number().min(10).max(1200).optional(),
+    intensity: z.enum(["easy", "moderate", "hard"]).optional(),
+    race: z.boolean().optional(),
+    leg_minutes: z.object({ swim: z.number().optional(), bike: z.number().optional(), run: z.number().optional() }).optional(),
+    temp_c: z.number().min(-10).max(45).optional().describe("Expected air temperature"),
+  }),
+  status: "Working out your fueling…",
+  run: async (i, ctx) => {
+    const [profile, th] = await Promise.all([storage.getProfile(ctx.userId), getThresholds(ctx.userId)]);
+    const fp: FuelingProfile = {
+      weightKg: th.weightKg,
+      sweatRateMlPerH: profile?.sweatRateMlPerH,
+      sweatSodiumMgPerL: profile?.sweatSodiumMgPerL,
+      carbToleranceGPerH: profile?.carbToleranceGPerH,
+    };
+    const known = [
+      fp.weightKg ? `weight ${fp.weightKg} kg` : "weight unknown",
+      fp.sweatRateMlPerH ? `sweat rate ${fp.sweatRateMlPerH} ml/h` : "sweat rate unknown (population estimate)",
+      fp.sweatSodiumMgPerL ? `sweat sodium ${fp.sweatSodiumMgPerL} mg/L` : "sweat sodium unknown (assumed 900 mg/L)",
+      fp.carbToleranceGPerH ? `practised carb max ${fp.carbToleranceGPerH} g/h` : "carb tolerance unknown (capped at 90 g/h)",
+    ].join("; ");
+
+    if (i.race) {
+      const race = profile?.goalRaceType as RaceType | null;
+      if (!race || !RACES[race]) return "ERROR: no goal race set. Set one with update_athlete_profile first.";
+      const pacing = racePacing(race, th, profile?.fitnessLevel);
+      const leg = (m: number | undefined, est: number | null | undefined) => (m ? m * 60 : est ?? undefined);
+      const legs = { swim: leg(i.leg_minutes?.swim, pacing?.swim?.timeSec), bike: leg(i.leg_minutes?.bike, pacing?.bike?.timeSec), run: leg(i.leg_minutes?.run, pacing?.run?.timeSec) };
+      if (!legs.swim && !legs.bike && !legs.run) return "ERROR: no leg time estimates (thresholds missing). Pass leg_minutes.";
+      const plan = raceFueling(race, legs, fp, i.temp_c);
+      const out = [`RACE FUELING — ${RACES[race].label}${i.temp_c != null ? `, ${i.temp_c}°C` : ""} (${known})`];
+      if (plan.carbLoad) {
+        out.push(`Carb load: ${plan.carbLoad.days} day(s) before, ${formatRange(plan.carbLoad.gPerKgPerDay, "g/kg/day")}${plan.carbLoad.gPerDay ? ` = ${formatRange(plan.carbLoad.gPerDay, "g/day")}` : ""}; cut fibre and fat.`);
+      }
+      out.push(`Breakfast: ${formatRange(plan.breakfast.hoursBefore, "h")} before${plan.breakfast.carbsG ? `, ${formatRange(plan.breakfast.carbsG, "g carbs")}` : ", 1-3 g/kg carbs"}. ${plan.breakfast.note}`);
+      for (const l of plan.legs) out.push(fuelingTargetText(`${l.leg.toUpperCase()} (${formatClock(l.durationSec)})`, l.target));
+      out.push(`Total in-race carbs ≈ ${formatRange(plan.totalCarbsG, "g")}`);
+      out.push(...plan.notes.map((n) => `- ${n}`));
+      return out.join("\n");
+    }
+
+    let durationSec = i.duration_min ? i.duration_min * 60 : 0;
+    let sport = i.sport;
+    let intensity = i.intensity === "easy" ? 0.6 : i.intensity === "hard" ? 0.85 : i.intensity === "moderate" ? 0.72 : undefined;
+    let label = "Session";
+    if (i.workout_id) {
+      const w = await getPlanWorkout(ctx.userId, i.workout_id);
+      if (!w) return "ERROR: workout not found.";
+      durationSec ||= w.plannedDurationSec ?? 0;
+      sport ??= (w.sport as Sport | null) ?? undefined;
+      intensity ??= intensityFromTss(w.plannedTss, durationSec);
+      label = `${w.date} "${w.title}"`;
+    }
+    if (!durationSec) return "ERROR: need workout_id or duration_min.";
+    const t = sessionFueling({ durationSec, intensity, sport, tempC: i.temp_c }, fp);
+    return `${fuelingTargetText(`${label} (${formatDuration(durationSec)}${sport ? ` ${sport}` : ""})`, t)}\n(${known})`;
+  },
+});
+
 const sync = defineTool({
   name: "sync_activities",
   description: "Pull the latest activities from Strava (covers Garmin/COROS/Wahoo/Apple Watch via their Strava sync). Use when the athlete says a workout is missing.",
@@ -455,6 +560,9 @@ export const COACH_TOOLS = [
   updateProfile,
   logHealth,
   resolveHealth,
+  remember,
+  forget,
+  getFueling,
   sync,
 ] as CoachTool<z.ZodType>[];
 

@@ -81,7 +81,7 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
     if (!history.length) await renameThread(thread.id, text.slice(0, 60));
     send({ type: "thread", threadId: thread.id });
 
-    const context = await buildTurnContext(userId);
+    const context = await buildTurnContext(userId, { firstTurn: !history.length });
     const userContent: Anthropic.Beta.BetaContentBlockParam[] = [
       { type: "text", text },
       { type: "text", text: `<app_context>\n${context}\n</app_context>` },

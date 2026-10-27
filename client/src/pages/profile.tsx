@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { ChevronRight, Loader2, LogOut, RefreshCw, Unlink, Zap, Watch, HeartPulse, Shield, Trash2, CalendarRange, Flag } from "lucide-react";
-import type { Profile, TrainingDay, HealthLog } from "@shared/schema";
+import { ChevronRight, Loader2, LogOut, RefreshCw, Unlink, Zap, Watch, HeartPulse, Shield, Trash2, CalendarRange, Flag, Heart, Droplets, Brain, X } from "lucide-react";
+import type { Profile, TrainingDay, HealthLog, CoachMemory } from "@shared/schema";
 import { RACES, THRESHOLD_LABELS, type RaceType, type ThresholdMetric } from "@shared/physiology";
 import { apiJson } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
@@ -14,6 +14,7 @@ import { connectStravaFlow, openGarminStravaHelpArticle, type StravaConnectPhase
 import { useToast } from "@/hooks/use-toast";
 import { useSync } from "@/hooks/use-sync";
 import { IOSFeedbackManager } from "@/lib/ios-utils";
+import { connectAppleHealth, disconnectAppleHealth, healthEnabled, healthSupported } from "@/lib/health";
 
 interface StravaStatus {
   connected: boolean;
@@ -52,10 +53,32 @@ export default function ProfilePage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [healthOpen, setHealthOpen] = useState(false);
   const [stravaPhase, setStravaPhase] = useState<StravaConnectPhase>("idle");
+  const [fuelOpen, setFuelOpen] = useState(false);
+  const [appleHealthOn, setAppleHealthOn] = useState(healthEnabled());
 
   const { data: strava } = useQuery<StravaStatus>({ queryKey: ["/api/strava/status"] });
   const { data: plan } = useQuery<{ id: string; title: string; startDate: string; endDate: string } | null>({ queryKey: ["/api/plan"] });
   const { data: health } = useQuery<HealthLog[]>({ queryKey: ["/api/health-logs"] });
+  const { data: memories } = useQuery<CoachMemory[]>({ queryKey: ["/api/coach/memory"] });
+
+  const forgetNote = useMutation({
+    mutationFn: (id: string) => apiJson("DELETE", `/api/coach/memory/${id}`),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["/api/coach/memory"] }),
+  });
+
+  const appleHealth = useMutation({
+    mutationFn: connectAppleHealth,
+    onSuccess: (n) => {
+      setAppleHealthOn(true);
+      void qc.invalidateQueries({ queryKey: ["/api/wellness"] });
+      toast(
+        n
+          ? { title: "Apple Health connected", description: `Imported ${n} days of recovery data.` }
+          : { title: "No Health data found", description: "Check Settings → Health → Data Access → Vista, and wear your watch to sleep." },
+      );
+    },
+    onError: (e: Error) => toast({ title: "Apple Health", description: e.message, variant: "destructive" }),
+  });
 
   const updateProfile = useMutation({
     mutationFn: (data: Partial<Profile>) => apiJson<Profile>("PUT", "/api/profile", data),
@@ -227,6 +250,62 @@ export default function ProfilePage() {
           </div>
           <ChevronRight size={15} className="text-ink-3" />
         </button>
+        {healthSupported() && (
+          <div className="mt-3 flex items-center gap-3 border-t border-hairline pt-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white">
+              <Heart size={19} className="text-[#FF2D55]" fill="#FF2D55" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[15px] font-semibold text-ink-1">Apple Health</div>
+              <div className="truncate text-[12px] text-ink-3">{appleHealthOn ? "HRV, resting HR and sleep sync on open" : "Lets your coach adjust to recovery"}</div>
+            </div>
+            {appleHealthOn ? (
+              <button
+                type="button"
+                onClick={() => {
+                  disconnectAppleHealth();
+                  setAppleHealthOn(false);
+                }}
+                className="press rounded-full bg-white/[0.08] p-2 text-bad"
+                aria-label="Stop Apple Health sync"
+              >
+                <Unlink size={16} />
+              </button>
+            ) : (
+              <button type="button" onClick={() => appleHealth.mutate()} disabled={appleHealth.isPending} className="press rounded-lg bg-white/[0.12] px-3 py-1.5 text-[13px] font-semibold text-ink-1">
+                {appleHealth.isPending ? <Loader2 size={14} className="animate-spin" /> : "Connect"}
+              </button>
+            )}
+          </div>
+        )}
+      </Card>
+
+      <SectionTitle>Fueling</SectionTitle>
+      <Card className="divide-y divide-hairline">
+        <Row icon={<Droplets size={17} />} label="Sweat rate" value={profile?.sweatRateMlPerH ? `${profile.sweatRateMlPerH} ml/h` : "Add"} onClick={() => setFuelOpen(true)} />
+        <Row label="Sweat sodium" value={profile?.sweatSodiumMgPerL ? `${profile.sweatSodiumMgPerL} mg/L` : "Add"} onClick={() => setFuelOpen(true)} />
+        <Row label="Carbs you can handle" value={profile?.carbToleranceGPerH ? `${profile.carbToleranceGPerH} g/h` : "Add"} onClick={() => setFuelOpen(true)} />
+      </Card>
+
+      <SectionTitle>What your coach knows</SectionTitle>
+      <Card className="divide-y divide-hairline">
+        {memories?.length ? (
+          memories.map((m) => (
+            <div key={m.id} className="flex items-start gap-3 px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">{m.category.replace("_", " ")}</div>
+                <div className="text-[14px] leading-snug text-ink-1">{m.note}</div>
+              </div>
+              <button type="button" onClick={() => forgetNote.mutate(m.id)} className="press rounded-full p-1.5 text-ink-3" aria-label="Forget this note">
+                <X size={15} />
+              </button>
+            </div>
+          ))
+        ) : (
+          <div className="flex items-center gap-3 px-4 py-3.5 text-[14px] text-ink-2">
+            <Brain size={17} className="text-ink-3" /> Tell your coach about injuries, schedule and goals — it remembers.
+          </div>
+        )}
       </Card>
 
       <SectionTitle
@@ -260,6 +339,7 @@ export default function ProfilePage() {
       <GoalSheet open={goalOpen} onClose={() => setGoalOpen(false)} profile={profile ?? null} onSave={(data, rebuildPlan) => updateProfile.mutate(data, { onSuccess: () => { setGoalOpen(false); if (rebuildPlan) rebuild.mutate(); } })} saving={updateProfile.isPending} />
       <ThresholdEditSheet metric={editMetric} onClose={() => setEditMetric(null)} />
       <HealthSheet open={healthOpen} onClose={() => setHealthOpen(false)} />
+      <FuelingSheet open={fuelOpen} onClose={() => setFuelOpen(false)} profile={profile ?? null} onSave={(data) => updateProfile.mutate(data, { onSuccess: () => setFuelOpen(false) })} saving={updateProfile.isPending} />
       <Sheet open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete account?">
         <p className="mb-4 text-[14px] leading-relaxed text-ink-2">This permanently deletes your profile, activities, plans, coach conversations and disconnects Strava. It can't be undone.</p>
         <PrimaryButton variant="danger" className="w-full" onClick={() => deleteAccount.mutate()} disabled={deleteAccount.isPending}>
@@ -404,6 +484,40 @@ const METRIC_INPUT: Record<ThresholdMetric, { key: string; hint: (p: ReturnType<
   weight_kg: { key: "weightKg", hint: (p) => (p.units === "imperial" ? "Pounds" : "Kilograms"), numeric: true, toKg: true },
   vo2max: { key: "", hint: () => "", numeric: true },
 };
+
+const FUEL_FIELDS = [
+  { key: "sweatRateMlPerH", label: "Sweat rate (ml/h)", hint: "e.g. 900 — weigh nude before/after 60 min, add fluid drunk" },
+  { key: "sweatSodiumMgPerL", label: "Sweat sodium (mg/L)", hint: "e.g. 1100 — from a sweat test" },
+  { key: "carbToleranceGPerH", label: "Carbs you can handle (g/h)", hint: "e.g. 75 — highest rate with no stomach issues" },
+] as const;
+
+function FuelingSheet({ open, onClose, profile, onSave, saving }: { open: boolean; onClose: () => void; profile: Profile | null; onSave: (d: Partial<Profile>) => void; saving: boolean }) {
+  const [vals, setVals] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (open) setVals(Object.fromEntries(FUEL_FIELDS.map((f) => [f.key, profile?.[f.key] ? String(profile[f.key]) : ""])));
+  }, [open, profile]);
+  const submit = () => onSave(Object.fromEntries(FUEL_FIELDS.map((f) => [f.key, vals[f.key]?.trim() ? Math.round(parseFloat(vals[f.key])) : null])) as Partial<Profile>);
+  return (
+    <Sheet open={open} onClose={onClose} title="Fueling">
+      {FUEL_FIELDS.map((f) => (
+        <label key={f.key} className="mb-3 block">
+          <span className="mb-1 block text-[13px] text-ink-2">{f.label}</span>
+          <input
+            value={vals[f.key] ?? ""}
+            onChange={(e) => setVals((v) => ({ ...v, [f.key]: e.target.value }))}
+            placeholder={f.hint}
+            inputMode="numeric"
+            className="w-full rounded-xl bg-white/[0.08] px-4 py-3 text-ink-1 outline-none placeholder:text-[13px] placeholder:text-ink-3"
+          />
+        </label>
+      ))}
+      <PrimaryButton className="mt-1 w-full" onClick={submit} disabled={saving}>
+        {saving ? <Loader2 size={16} className="animate-spin" /> : "Save"}
+      </PrimaryButton>
+      <p className="mt-3 text-[12px] leading-snug text-ink-3">Blank fields use typical values. Your coach uses these for session and race-day fueling targets.</p>
+    </Sheet>
+  );
+}
 
 function ThresholdEditSheet({ metric, onClose }: { metric: ThresholdMetric | null; onClose: () => void }) {
   const prefs = usePrefs();

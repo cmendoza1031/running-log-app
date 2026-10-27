@@ -75,5 +75,7 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Vista reads your heart rate variability, resting heart rate and sleep so your coach can adjust training to how well you are recovering.</string>
 </dict>
 </plist>

@@ -235,19 +235,25 @@ export type AdaptAction = "ease_next_days" | "add_recovery_day";
  *  - ease_next_days: next 3 days — key sessions become easy aerobic at 80% duration, others −20%.
  *  - add_recovery_day: tomorrow becomes a rest day (sessions marked skipped) and the day after is eased.
  */
-export async function adaptUpcoming(userId: string, action: AdaptAction): Promise<{ changed: number; summary: string }> {
+export async function adaptUpcoming(
+  userId: string,
+  action: AdaptAction,
+  opts: { includeToday?: boolean } = {},
+): Promise<{ changed: number; summary: string }> {
   const profile = await storage.getProfile(userId);
   const today = todayInTz(profile?.timezone);
   const th = await planningThresholds(userId, profile?.fitnessLevel);
-  const start = addDays(today, 1);
+  const start = opts.includeToday ? today : addDays(today, 1);
   const ws = (await getPlanWorkoutsBetween(userId, start, addDays(start, 2))).filter((w) => !w.isCompleted && w.status !== "skipped");
   let changed = 0;
+  const log: string[] = [];
   for (const w of ws) {
     if (!isValidStructure(w.structure)) continue;
     const structure = w.structure as WorkoutStructure;
     if (action === "add_recovery_day" && w.date === start) {
       await patchPlanWorkout(userId, w.id, { status: "skipped", notes: "Converted to rest day — recovery prioritized." });
       changed++;
+      log.push(`${w.date} "${w.title}" → rest`);
       continue;
     }
     if (action === "add_recovery_day" && w.date !== addDays(start, 1)) continue;
@@ -261,11 +267,14 @@ export async function adaptUpcoming(userId: string, action: AdaptAction): Promis
       notes: `Adjusted by coach: ${action === "ease_next_days" ? "eased for recovery" : "recovery day inserted"}. Original: ${w.title}`,
     });
     changed++;
+    log.push(`${w.date} "${w.title}" → ${w.isKey ? "easy aerobic" : "−20% duration"}`);
   }
-  const summary =
+  const first = start === today ? "today" : "tomorrow";
+  const head =
     action === "ease_next_days"
-      ? `Eased the next 3 days (${changed} sessions): key sessions swapped for easy aerobic work, volume −20%.`
-      : `Tomorrow is now a rest day and the following day is eased (${changed} sessions changed).`;
+      ? `Eased ${start} → ${addDays(start, 2)} (${changed} sessions): key sessions swapped for easy aerobic work, volume −20%.`
+      : `${first[0].toUpperCase()}${first.slice(1)} (${start}) is now a rest day and the next day is eased (${changed} sessions changed).`;
+  const summary = log.length ? `${head}\n${log.map((l) => `- ${l}`).join("\n")}` : `${head} Nothing was scheduled in that window.`;
   return { changed, summary };
 }
 

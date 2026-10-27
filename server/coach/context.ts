@@ -34,8 +34,10 @@ import {
   prefsFromProfile,
   todayInTz,
   type AthletePrefs,
+  listMemories,
 } from "../data";
 import { getFitness, activityMovingSec } from "../analytics/load";
+import { getWellness, wellnessText } from "../analytics/wellness";
 
 export function thresholdsText(th: Thresholds, prefs: AthletePrefs): string {
   const parts: string[] = [];
@@ -104,7 +106,7 @@ export async function buildOverview(userId: string): Promise<OverviewData> {
   const profile = await storage.getProfile(userId);
   const prefs = prefsFromProfile(profile);
   const today = todayInTz(prefs.tz);
-  const [thState, fitness, recent, upcoming, plan, health, strava] = await Promise.all([
+  const [thState, fitness, recent, upcoming, plan, health, strava, memories, wellness] = await Promise.all([
     getThresholdState(userId),
     getFitness(userId, prefs.tz, { historyDays: 28 }),
     getActivitiesBetween(userId, addDays(today, -14), today),
@@ -112,6 +114,8 @@ export async function buildOverview(userId: string): Promise<OverviewData> {
     getActivePlan(userId),
     storage.getHealthLogs(userId, 60),
     storage.getIntegration(userId, "strava"),
+    listMemories(userId),
+    getWellness(userId, today),
   ]);
   const th = thState.values;
   const lines: string[] = [];
@@ -124,6 +128,12 @@ export async function buildOverview(userId: string): Promise<OverviewData> {
     const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     lines.push(`AVAILABILITY: ${sched.map((d) => `${names[d.day]} ${d.maxMinutes}min${d.isLongDay ? " (long day)" : ""}`).join(", ")}`);
   }
+  const fuel = [
+    profile?.sweatRateMlPerH ? `sweat ${profile.sweatRateMlPerH} ml/h` : null,
+    profile?.sweatSodiumMgPerL ? `sweat sodium ${profile.sweatSodiumMgPerL} mg/L` : null,
+    profile?.carbToleranceGPerH ? `carb tolerance ${profile.carbToleranceGPerH} g/h` : null,
+  ].filter(Boolean);
+  lines.push(`FUELING PROFILE: ${fuel.length ? fuel.join(", ") : "not measured"}`);
   lines.push(`THRESHOLDS: ${thresholdsText(th, prefs)}`);
   const sources = Object.entries(thState.current).map(([m, r]) => `${m}: ${r!.source} ${r!.effectiveDate}`);
   if (sources.length) lines.push(`  (sources: ${sources.join(", ")})`);
@@ -166,22 +176,27 @@ export async function buildOverview(userId: string): Promise<OverviewData> {
   if (recent.length) for (const r of recent) lines.push(`  ${activityLine(r, prefs)}`);
   else lines.push("  none");
   const active = health.filter((h) => !h.resolvedDate);
+  lines.push(wellnessText(wellness));
   if (active.length) lines.push(`HEALTH (active): ${active.map((h) => `[${h.id}] ${h.date} ${h.type} sev ${h.severity}${h.bodyPart ? ` ${h.bodyPart}` : ""}: ${h.description}`).join("; ")}`);
   lines.push(
     `DATA: Strava ${strava?.isActive ? `connected, last sync ${strava.lastSyncedAt ? new Date(strava.lastSyncedAt).toISOString() : "never"}` : "NOT connected"}`,
   );
+  lines.push("COACH NOTES (long-term memory; use remember/forget to maintain):");
+  if (memories.length) for (const m of memories) lines.push(`  [${m.id}] ${m.category}: ${m.note}`);
+  else lines.push("  none yet");
   return { prefs, today, text: lines.join("\n") };
 }
 
 /** Short per-turn context appended to each user message (keeps the cached prefix stable). */
-export async function buildTurnContext(userId: string): Promise<string> {
+export async function buildTurnContext(userId: string, opts: { firstTurn?: boolean } = {}): Promise<string> {
   const profile = await storage.getProfile(userId);
   const prefs = prefsFromProfile(profile);
   const today = todayInTz(prefs.tz);
-  const [fitness, todays, last] = await Promise.all([
+  const [fitness, todays, last, wellness] = await Promise.all([
     getFitness(userId, prefs.tz, { historyDays: 1 }),
     getPlanWorkoutsBetween(userId, today, addDays(today, 1)),
     getActivitiesBetween(userId, addDays(today, -2), today),
+    getWellness(userId, today),
   ]);
   const th = (await getThresholdState(userId)).values;
   const weekday = new Date(today + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
@@ -191,7 +206,12 @@ export async function buildTurnContext(userId: string): Promise<string> {
     todays.length ? `Planned today/tomorrow: ${todays.map((w) => `${w.date} ${w.title}${w.isCompleted ? " (done)" : ""} [${w.id}]`).join("; ")}.` : "Nothing planned today/tomorrow.",
     last.length ? `Latest activities: ${last.slice(0, 3).map((r) => activityLine(r, prefs)).join(" | ")}` : "",
     `Thresholds: ${thresholdsText(th, prefs)}.`,
+    wellness ? wellnessText(wellness) : "",
   ];
+  if (opts.firstTurn) {
+    const memories = await listMemories(userId);
+    if (memories.length) parts.push(`Coach notes: ${memories.map((m) => `[${m.id}] ${m.category}: ${m.note}`).join(" | ")}`);
+  }
   return parts.filter(Boolean).join("\n");
 }
 

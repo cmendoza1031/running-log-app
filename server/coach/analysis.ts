@@ -1,5 +1,5 @@
 /**
- * Post-workout analysis with a small, cheap model (Claude Haiku 4.5).
+ * Post-workout analysis with a small, cheap model (Claude Haiku 5.5).
  * Deterministic metrics are computed first; the model only interprets them in a coach's voice
  * and picks one adjustment for upcoming training.
  */
@@ -25,8 +25,9 @@ import { addDays, daysBetween } from "@shared/training-load";
 import { storage } from "../storage";
 import { getActivity, getActivitiesBetween, getPlanWorkout, getThresholds, patchActivity, prefsFromProfile, todayInTz, type AthletePrefs } from "../data";
 import { getFitness } from "../analytics/load";
+import { getWellness, wellnessText } from "../analytics/wellness";
 
-export const ANALYSIS_MODEL = process.env.ANALYSIS_MODEL || "claude-haiku-4-5";
+export const ANALYSIS_MODEL = process.env.ANALYSIS_MODEL || "claude-haiku-5-5";
 
 let client: Anthropic | null = null;
 function anthropic(): Anthropic {
@@ -58,6 +59,8 @@ Principles:
   * add_recovery_day: the athlete reports pain, illness, or exhaustion, or TSB below -40 with poor execution.
   * raise_threshold: the athlete clearly exceeded threshold-level targets at normal HR/RPE (e.g. held top of threshold range easily, or a new best effort).
   * lower_threshold: repeatedly unable to reach targets despite being fresh.
+- Apple Health wellness (if given): HRV SUPPRESSED / ACUTE_DIP or ELEVATED resting HR is a real recovery signal and counts as the second signal for ease_next_days. Normal HRV with high HR in the session points to heat, dehydration or pacing instead.
+- Sessions over 2 h: comment on fueling only if the athlete's notes mention it or the second half clearly faded.
 - If the activity has too little data, say what you can and keep it short.
 - Keep the summary to 2-3 sentences. Refer to days by weekday or date, not "day N".`;
 
@@ -134,9 +137,10 @@ export async function analyzeActivity(userId: string, activityId: string): Promi
   const today = todayInTz(prefs.tz);
 
   const planned: PlanWorkout | undefined = run.planWorkoutId ? await getPlanWorkout(userId, run.planWorkoutId) : undefined;
-  const [fitness, recent] = await Promise.all([
+  const [fitness, recent, wellness] = await Promise.all([
     getFitness(userId, prefs.tz, { historyDays: 14 }),
     getActivitiesBetween(userId, addDays(run.date, -7), addDays(run.date, -1)),
+    getWellness(userId, run.date),
   ]);
 
   const ctx: string[] = [];
@@ -146,6 +150,7 @@ export async function analyzeActivity(userId: string, activityId: string): Promi
   if (race && RACES[race] && raceDate && raceDate >= today) ctx.push(`Goal: ${RACES[race].label} in ${daysBetween(today, raceDate)} days.`);
   ctx.push(`Typical week for this athlete ≈ ${Math.round(fitness.ctl * 7)} TSS (CTL × 7).`);
   ctx.push(`Current fitness (CTL) ${fitness.ctl}, fatigue (ATL) ${fitness.atl}, form (TSB) ${fitness.tsb} → "${fitness.form.label}" (${fitness.form.advice}).`);
+  if (wellness) ctx.push(wellnessText(wellness));
   if (recent.length) {
     ctx.push(
       `The 7 days before this session: ${recent.length} sessions totaling ${Math.round(recent.reduce((a, r) => a + (r.tss ?? 0), 0))} TSS (${recent
@@ -177,7 +182,8 @@ export async function analyzeActivity(userId: string, activityId: string): Promi
     if (!parsed) return null;
     // Guardrail: plan changes need evidence beyond a single model judgment.
     const athleteStruggling = (run.feel != null && run.feel <= 2) || (run.perceivedEffort != null && run.perceivedEffort >= 9 && !planned?.isKey);
-    if ((parsed.suggestedAction === "ease_next_days" || parsed.suggestedAction === "add_recovery_day") && fitness.tsb > -30 && !athleteStruggling) {
+    const poorRecovery = wellness?.fatigueSignal ?? false;
+    if ((parsed.suggestedAction === "ease_next_days" || parsed.suggestedAction === "add_recovery_day") && fitness.tsb > -30 && !athleteStruggling && !poorRecovery) {
       parsed.suggestedAction = "none";
       parsed.actionReason = "";
     }

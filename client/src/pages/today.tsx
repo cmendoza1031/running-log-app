@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { RefreshCw, Flag, Moon, Plus, ChevronRight, Zap } from "lucide-react";
+import { RefreshCw, Flag, Moon, Plus, ChevronRight, Zap, HeartPulse } from "lucide-react";
 import { formatDuration, formatClock, formatRunPace, formatSwimPace, THRESHOLD_LABELS, type ThresholdMetric } from "@shared/physiology";
 import type { Dashboard } from "@/lib/types";
 import { signed, usePrefs, useProfile, relativeDay, addDaysStr, timeAgo, SPORTS, PMC_COLORS, fmtDate } from "@/lib/vista";
@@ -23,11 +23,55 @@ const FORM_COLOR: Record<string, string> = {
   detraining: "#FFD60A",
 };
 
+interface Wellness {
+  hrvStatus: "suppressed" | "acute_dip" | "normal" | "elevated" | "insufficient_data";
+  hrv7dMs: number | null;
+  hrvNormalLowMs: number | null;
+  hrvNormalHighMs: number | null;
+  rhr7d: number | null;
+  rhrBaseline: number | null;
+  rhrElevated: boolean;
+  sleep7dMin: number | null;
+  fatigueSignal: boolean;
+}
+
+const HRV_LABEL: Record<Wellness["hrvStatus"], [string, string]> = {
+  suppressed: ["Under-recovered", "#FF453A"],
+  acute_dip: ["Dipped", "#FFD60A"],
+  normal: ["Normal", "#30D158"],
+  elevated: ["High", "#3A86FF"],
+  insufficient_data: ["Building baseline", "#A1A1A6"],
+};
+
+const hm = (min: number) => `${Math.floor(min / 60)}h ${String(Math.round(min % 60)).padStart(2, "0")}m`;
+
+function RecoveryCard({ w }: { w: Wellness }) {
+  const [label, color] = HRV_LABEL[w.hrvStatus];
+  return (
+    <Card className="mb-3 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <HeartPulse size={16} style={{ color }} />
+        <span className="text-[14px] font-semibold text-ink-1">Recovery</span>
+        <span className="ml-auto text-[13px] font-semibold" style={{ color: w.rhrElevated && w.hrvStatus === "normal" ? "#FFD60A" : color }}>
+          {w.rhrElevated && w.hrvStatus === "normal" ? "Resting HR up" : label}
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <Stat label="HRV 7d" value={w.hrv7dMs ?? "—"} unit="ms" sub={w.hrvNormalLowMs ? `normal ${w.hrvNormalLowMs}–${w.hrvNormalHighMs}` : undefined} />
+        <Stat label="Resting HR" value={w.rhr7d ?? "—"} unit="bpm" sub={w.rhrBaseline ? `usual ${w.rhrBaseline}` : undefined} />
+        <Stat label="Sleep 7d" value={w.sleep7dMin ? hm(w.sleep7dMin) : "—"} />
+      </div>
+      {w.fatigueSignal && <div className="mt-2 text-[12px] leading-snug text-ink-2">Your body shows strain. Keep intensity low today and ask your coach if the plan should change.</div>}
+    </Card>
+  );
+}
+
 export default function Today() {
   const prefs = usePrefs();
   const { data: profile } = useProfile();
   const [, navigate] = useLocation();
   const { data, isLoading } = useQuery<Dashboard>({ queryKey: ["/api/dashboard"] });
+  const { data: wellness } = useQuery<Wellness | null>({ queryKey: ["/api/wellness"] });
   const sync = useSync();
 
   const firstName = profile?.fullName?.split(" ")[0];
@@ -171,6 +215,7 @@ export default function Today() {
       >
         Fitness & form
       </SectionTitle>
+      {wellness && <RecoveryCard w={wellness} />}
       <Card className="p-4">
         <div className="mb-3 grid grid-cols-3 gap-3">
           <Stat label="Fitness" value={Math.round(f.ctl)} color={PMC_COLORS.ctl} sub={f.rampRate != null ? `${f.rampRate > 0 ? "+" : ""}${f.rampRate}/wk` : undefined} />

@@ -11,6 +11,7 @@ import {
   boolean,
   uuid,
   jsonb,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -74,6 +75,10 @@ export const profiles = pgTable("profiles", {
   goalRaceType: text("goal_race_type"),
   /** Athlete-reported limiter sport, e.g. "swim" — the planner gives it more time. */
   limiter: text("limiter"),
+  /** Fueling profile (optional; see shared/fueling.ts for defaults). */
+  sweatRateMlPerH: integer("sweat_rate_ml_per_h"),
+  sweatSodiumMgPerL: integer("sweat_sodium_mg_per_l"),
+  carbToleranceGPerH: integer("carb_tolerance_g_per_h"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -292,6 +297,35 @@ export const coachMessages = pgTable("coach_messages", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// ─── Coach long-term memory (durable facts across conversations) ──────────────
+export const COACH_MEMORY_CATEGORIES = ["injury", "preference", "life", "goal", "race_history", "equipment", "other"] as const;
+export type CoachMemoryCategory = (typeof COACH_MEMORY_CATEGORIES)[number];
+
+export const coachMemory = pgTable("coach_memory", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull(),
+  category: text("category").$type<CoachMemoryCategory>().notNull(),
+  note: text("note").notNull(),
+  archived: boolean("archived").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─── Daily wellness (Apple Health: HRV, resting HR, sleep) ────────────────────
+export const dailyWellness = pgTable(
+  "daily_wellness",
+  {
+    userId: uuid("user_id").notNull(),
+    date: date("date").notNull(),
+    hrvMs: doublePrecision("hrv_ms"),
+    restingHr: integer("resting_hr"),
+    sleepMin: integer("sleep_min"),
+    source: text("source").notNull().default("apple_health"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.date] })],
+);
+
 export interface ActivityLap {
   name?: string;
   distanceM: number;
@@ -397,6 +431,8 @@ export type HealthLog = typeof healthLogs.$inferSelect;
 export type AthleteThreshold = typeof athleteThresholds.$inferSelect;
 export type CoachThread = typeof coachThreads.$inferSelect;
 export type CoachMessage = typeof coachMessages.$inferSelect;
+export type CoachMemory = typeof coachMemory.$inferSelect;
+export type DailyWellness = typeof dailyWellness.$inferSelect;
 export type InsertHealthLog = z.infer<typeof insertHealthLogSchema>;
 
 // Legacy type for backward compat

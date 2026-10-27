@@ -12,7 +12,7 @@ Vista builds periodized training plans (5K → Ironman), targets every interval 
 | **Data** | `server/integrations/strava.ts` — OAuth, 1-year backfill, detail + streams (laps, zones, NP, power curve, best efforts, decoupling, EF), webhooks for instant import, rate-limit aware. Garmin/COROS/Wahoo/Apple Watch reach Vista through their Strava sync. |
 | **Physiology** | `shared/physiology.ts`, `server/analytics/` — VDOT/race predictions, Coggan/Friel/CSS zones, TSS (power, pace, swim, HR, RPE fallbacks), CTL/ATL/TSB with plan projection, intensity distribution, **automatic threshold detection** (only raises on evidence; suggests instead of overwriting values you set). |
 | **Coach** | `server/coach/agent.ts` — Claude Opus 5.5 tool-use loop (15 tools: overview, trends, plan create/edit, thresholds, health…), streamed over SSE, append-only history with prompt caching. |
-| **Workout notes** | `server/coach/analysis.ts` — Claude Haiku 4.5 writes a short note after every synced workout (≈$0.003 each) with a guarded, one-tap plan adjustment. |
+| **Workout notes** | `server/coach/analysis.ts` — Claude Haiku 5.5 writes a short note after every synced workout (≈$0.003 each) with a guarded, one-tap plan adjustment. |
 | **App** | `client/` — React + Capacitor iOS. Tabs: Today · Calendar · Coach · Progress · Profile. |
 
 ## Run it locally

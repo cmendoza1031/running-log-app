@@ -14,6 +14,10 @@ final class AppBridgeViewController: CAPBridgeViewController {
         return config
     }
 
+    override func capacitorDidLoad() {
+        bridge?.registerPluginInstance(HealthPlugin())
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         overrideUserInterfaceStyle = .dark

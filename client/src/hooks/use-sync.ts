@@ -6,6 +6,7 @@ import { apiJson } from "@/lib/queryClient";
 import type { SyncResult } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { THRESHOLD_LABELS, type ThresholdMetric } from "@shared/physiology";
+import { healthEnabled, syncAppleHealth } from "@/lib/health";
 
 const MIN_INTERVAL_MS = 3 * 60 * 1000;
 let lastRun = 0;
@@ -17,7 +18,10 @@ async function doSync(force: boolean): Promise<SyncResult | null> {
   if (!force && Date.now() - lastRun < MIN_INTERVAL_MS) return null;
   lastRun = Date.now();
   listeners.forEach((l) => l(true));
-  inflight = apiJson<SyncResult>("POST", "/api/sync")
+  // Wellness first, so the coach's post-workout notes see last night's HRV.
+  const health = healthEnabled() ? syncAppleHealth(7).catch(() => 0) : Promise.resolve(0);
+  inflight = health
+    .then(() => apiJson<SyncResult>("POST", "/api/sync"))
     .catch(() => null)
     .finally(() => {
       inflight = null;
