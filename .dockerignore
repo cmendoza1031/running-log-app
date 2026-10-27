@@ -1,0 +1,10 @@
+node_modules
+dist
+ios
+archive
+attached_assets
+.local
+.env
+.env.*
+!.env.example
+supabase/.temp

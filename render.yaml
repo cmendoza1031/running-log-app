@@ -1,0 +1,31 @@
+# One-click deploy on Render (https://render.com): New → Blueprint → point at this repo.
+# Set the secret values in the Render dashboard after the first deploy.
+services:
+  - type: web
+    name: vista-api
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_URL
+        sync: false # e.g. https://vista-api.onrender.com — enables Strava webhooks
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false # use the Supabase *session pooler* URI (IPv4)
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: STRAVA_CLIENT_ID
+        sync: false
+      - key: STRAVA_CLIENT_SECRET
+        sync: false
+      - key: STATE_SECRET
+        generateValue: true
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false

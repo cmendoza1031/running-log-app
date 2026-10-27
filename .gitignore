@@ -8,3 +8,5 @@ APP_STORE_GUIDE.md
 .env
 .env.local
 *.p8
+.env.localdev
+

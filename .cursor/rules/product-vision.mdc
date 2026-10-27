@@ -1,0 +1,91 @@
+---
+description: Vista product vision, coaching philosophy, and technical north star. Read this before making any product or architectural decision.
+globs:
+  - "**/*"
+alwaysApply: false
+---
+
+# Vista — Product Vision
+
+## The Problem
+
+There is a complete lack of truly personalized coaching in the fitness app world.
+The options today are:
+
+1. **Generic apps** — cookie-cutter plans that ignore the individual
+2. **Human coaches** — expensive ($100–300+/month), limited availability, inconsistent quality
+3. **"Smart" apps** — surface-level personalization based on a few inputs, no ongoing adaptation
+
+AI can deliver elite-level, evidence-based coaching 24/7 — adapting in real time to training data, life circumstances, injuries, and goals — at a fraction of the cost of a human coach.
+
+## Who We Serve
+
+Motivated athletes aged ~16–35 who embrace technology and want to get meaningfully better at endurance sports. They range from competitive high schoolers to age-group triathletes to adults training for their first marathon. They are:
+
+- Willing to train hard but want smart guidance
+- Data-aware (HR monitors, GPS watches, power meters)
+- Comfortable with AI and expect modern, polished UX
+- Looking for a coach that respects their time and adapts to their life
+
+## Supported Sports
+
+Four disciplines, selected for clean separation and maximum coverage:
+
+- **Running** — road, track, trail, treadmill
+- **Cycling** — road, gravel, MTB, indoor
+- **Swimming** — pool, open water
+- **Triathlon** — any multi-sport combination (sprint through Ironman)
+
+## Coaching Philosophy
+
+The Vista coach is **not a chatbot**. It is an elite endurance coach that happens to live in an app.
+
+### Principles
+
+1. **Science-backed, not generic** — Every recommendation traces to established training science: Seiler's polarized model, Daniels' VDOT, Coggan's power zones, San Millan's Zone 2 research. The coach cites real principles, not platitudes.
+
+2. **Firm but empathetic** — The coach tells the truth even when it's uncomfortable ("you're running your easy days too fast") but always with respect. It never guilts or shames.
+
+3. **Proactive, not reactive** — The coach spots patterns before the athlete does: mileage spikes, intensity creep, overtraining signals, missed recovery. It surfaces insights without being asked.
+
+4. **Adaptive to life** — Injuries, illness, work stress, travel — life happens. The coach acknowledges the emotional weight, adjusts the plan (never abandons it), and builds a path back. No athlete should feel bad about what they can't control.
+
+5. **Not sycophantic** — Real encouragement based on real progress. "Great job!" is earned, not automatic. The coach motivates when needed and pushes when appropriate.
+
+### Training Science Foundation
+
+- **Aerobic base first** (Lydiard) — the aerobic engine drives everything
+- **80/20 intensity distribution** (Seiler) — ~80% easy, ~20% moderate-to-hard
+- **Progressive overload** — no more than ~10% weekly volume increase; recovery weeks every 3–4 weeks
+- **Sport-specific periodization** — base → build → peak → taper, adapted per discipline
+- **Individual response** — plans adjust based on actual data, RPE, and athlete feedback
+- **Heart rate zones** (5-zone model based on lactate threshold)
+- **Power zones** for cycling (Coggan 7-zone model)
+- **Critical Swim Speed** for swim pacing
+- **VO2max estimation** from race/time-trial data
+
+## Technical North Star
+
+Every technical decision works backward from the user problem:
+
+1. **Onboarding** captures sport(s), level, availability, and goals → feeds the agent's system context
+2. **The agent** (LangGraph ReAct + Anthropic) has full access to the athlete's profile, training history, active plan, and health status via tools
+3. **Training plans** are structured (periodized blocks → weekly → daily workouts) and live in the athlete's calendar
+4. **Workout files** (.fit) are exportable to GPS watches so the athlete can execute structured workouts
+5. **Health logging** (injury, illness, fatigue) gives the agent context to adjust plans intelligently
+6. **Charts and insights** are personalized per sport — a cyclist sees power data, a runner sees pace zones, a triathlete sees combined load
+
+## Design Direction
+
+Dark-mode-first, inspired by modern fintech/crypto apps. Dark backgrounds make data visualizations pop and convey trust/professionalism. Sky-blue remains the primary accent — vibrant against dark surfaces. The UI is clean, spacious, and optimized for mobile-first interaction with haptic feedback throughout.
+
+## Decision Framework
+
+When choosing between approaches, ask:
+
+1. Does this make the athlete's training measurably better?
+2. Is this grounded in training science?
+3. Does this respect the athlete's time and intelligence?
+4. Would a world-class human coach do this?
+
+If yes to all four, build it. If not, reconsider.

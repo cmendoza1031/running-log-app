@@ -1,54 +1,51 @@
-# Running Log Tracker
+# Vista — AI coach for swim, bike & run
 
-My 12 yr old brother wanted to make an app to track his running process - felt like Strava was so socially oriented.
+Vista builds periodized training plans (5K → Ironman), targets every interval at *your* watts, paces and heart rates, exports structured workouts to your watch, imports every session from Strava automatically, and has an AI coach review each workout and adapt what's next.
 
-So I helped him build this.
+## What's in the box
 
-## Getting the app running
+| Area | How it works |
+|---|---|
+| **Plans** | `server/planning/` — deterministic periodization engine (base → build → peak → taper → race, 3:1 recovery weeks, ≤10%/week ramps, race-specific long sessions, bricks, CSS sets, race-week template, race-day pacing). The coach calls it and then customizes sessions. |
+| **Workouts** | `shared/workout-structure.ts` — structured workouts stored *relative to thresholds* (zones, %FTP, %threshold pace, %CSS). Change FTP → every future workout re-targets. Text DSL: `4x(8min 95-100% FTP, 3min Z1)`. |
+| **Devices** | `server/fit-export.ts` — Garmin/COROS `.fit` (repeats, power/pace/HR ranges, pool length) and Zwift `.zwo`. On iOS the share sheet opens (AirDrop / Files / Garmin Express). |
+| **Data** | `server/integrations/strava.ts` — OAuth, 1-year backfill, detail + streams (laps, zones, NP, power curve, best efforts, decoupling, EF), webhooks for instant import, rate-limit aware. Garmin/COROS/Wahoo/Apple Watch reach Vista through their Strava sync. |
+| **Physiology** | `shared/physiology.ts`, `server/analytics/` — VDOT/race predictions, Coggan/Friel/CSS zones, TSS (power, pace, swim, HR, RPE fallbacks), CTL/ATL/TSB with plan projection, intensity distribution, **automatic threshold detection** (only raises on evidence; suggests instead of overwriting values you set). |
+| **Coach** | `server/coach/agent.ts` — Claude Opus 5.5 tool-use loop (15 tools: overview, trends, plan create/edit, thresholds, health…), streamed over SSE, append-only history with prompt caching. |
+| **Workout notes** | `server/coach/analysis.ts` — Claude Haiku 4.5 writes a short note after every synced workout (≈$0.003 each) with a guarded, one-tap plan adjustment. |
+| **App** | `client/` — React + Capacitor iOS. Tabs: Today · Calendar · Coach · Progress · Profile. |
 
-### One dev server (not two)
-
-`npm run dev` starts a **single** Node process: Express serves the API and, in development, runs Vite inside the same server. Default URL is **http://localhost:3003** (override with `PORT` in `.env`).
-
-You do **not** need a separate `vite` terminal unless you change the project to split them.
-
-### Environment
-
-1. Copy `.env.example` to `.env`.
-2. Fill in Supabase, optional Anthropic/Strava keys as needed (see comments in `.env.example`).
-
-### Web / API (browser)
+## Run it locally
 
 ```bash
 npm install
-npm run dev
+supabase start                       # local auth + Postgres (Docker); migrations in supabase/migrations
+cp .env.example .env.localdev        # fill with `supabase status -o env` values + your API keys
+npm run dev:local                    # http://localhost:3003
+npm run seed:demo                    # optional: demo triathlete demo@vista.local / password123
 ```
 
-Open http://localhost:3003 in the browser.
+Against the hosted Supabase project use `npm run dev` (reads `.env`).
 
-### iOS (Xcode + Simulator / device)
+## iOS
 
-Capacitor is configured to load the app from the dev server (`server.url` → `http://localhost:3003` in `capacitor.config.ts`), so the simulator/device WebView talks to whatever is running from `npm run dev`.
+```bash
+# Development (live reload from your running dev server)
+npm run ios:dev                                   # CAP_SERVER_URL=http://<mac-ip>:3003 for a real device
 
-1. **Terminal 1:** `npm run dev` (keep it running).
-2. **First time or after native/plugin changes:** sync the native project, then open Xcode:
+# App Store build (bundled web app + deployed API)
+VITE_API_URL=https://your-api-host npm run ios:release
+# then in Xcode: Product → Archive → Distribute App → App Store Connect
+```
 
-   ```bash
-   npx cap sync ios
-   npx cap open ios
-   ```
+## Deploy the API
 
-   `npx cap open ios` opens the iOS workspace in Xcode. After that you can open the project from Xcode directly if you prefer.
+The iOS app needs a public HTTPS API (Strava webhooks need it too). `render.yaml` + `Dockerfile` deploy it on Render (or any Docker host):
 
-3. In Xcode, pick a simulator or your device and run (▶).
+1. Render → New → Blueprint → this repo. Fill the env vars (see `.env.example`). Use Supabase's **Session pooler** connection string for `DATABASE_URL`.
+2. Set `APP_URL` to the service URL. On boot the server registers the Strava webhook automatically.
+3. In Strava API settings set *Authorization Callback Domain* to that host. Both web and iOS return there (iOS bounces back into the app via `vistarunning://`).
 
-If you only changed **web** code, you usually just refresh or re-run the app; `cap sync` is mainly for native dependencies, `capacitor.config.ts` changes, or new plugins.
+## Database migrations
 
-### Quick reference
-
-| Goal | Command |
-|------|---------|
-| Dev (API + React) | `npm run dev` |
-| Sync web build + native deps to iOS | `npx cap sync ios` |
-| Open iOS project in Xcode | `npx cap open ios` |
-| Production build | `npm run build` then `npx cap sync ios` before archiving |
+`supabase/migrations/*.sql` are additive and idempotent. Apply with `supabase db push` or paste into the SQL editor.
