@@ -26,6 +26,7 @@ import {
   insertPlanWorkouts,
   patchActivity,
   patchPlanWorkout,
+  bulkSetPlannedMetrics,
   deleteFuturePlannedWorkouts,
   prefsFromProfile,
   todayInTz,
@@ -170,13 +171,13 @@ export async function refreshPlannedMetrics(userId: string): Promise<number> {
   const today = todayInTz(profile?.timezone);
   const th = await planningThresholds(userId, profile?.fitnessLevel);
   const ws = await getPlanWorkoutsBetween(userId, today, addDays(today, 400));
-  let n = 0;
-  for (const w of ws) {
-    if (w.isCompleted || !isValidStructure(w.structure)) continue;
-    await patchPlanWorkout(userId, w.id, workoutMetrics(w.structure as WorkoutStructure, th));
-    n++;
-  }
-  return n;
+  const changed = ws
+    .filter((w) => !w.isCompleted && isValidStructure(w.structure))
+    .map((w) => ({ id: w.id, ...workoutMetrics(w.structure as WorkoutStructure, th), prev: w }))
+    .filter((r) => r.plannedTss !== r.prev.plannedTss || r.plannedDurationSec !== r.prev.plannedDurationSec || r.plannedDistanceM !== r.prev.plannedDistanceM)
+    .map(({ prev: _prev, ...r }) => r);
+  await bulkSetPlannedMetrics(userId, changed);
+  return changed.length;
 }
 
 // ─── Matching activities to planned sessions ─────────────────────────────────

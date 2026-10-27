@@ -227,6 +227,26 @@ export async function insertPlanWorkouts(rows: PlanWorkoutInsert[]): Promise<Pla
   return out;
 }
 
+/** Set planned metrics for many workouts in one statement (a plan can hold 300+ future sessions). */
+export async function bulkSetPlannedMetrics(
+  userId: string,
+  rows: { id: string; plannedTss: number; plannedDurationSec: number; plannedDistanceM: number }[],
+): Promise<void> {
+  for (let i = 0; i < rows.length; i += 500) {
+    const values = sql.join(
+      rows
+        .slice(i, i + 500)
+        .map((r) => sql`(${r.id}::uuid, ${r.plannedTss}::double precision, ${r.plannedDurationSec}::integer, ${r.plannedDistanceM}::double precision)`),
+      sql`, `,
+    );
+    await db.execute(sql`
+      UPDATE plan_workouts AS w
+      SET planned_tss = v.tss, planned_duration_sec = v.dur, planned_distance_m = v.dist, updated_at = now()
+      FROM (VALUES ${values}) AS v(id, tss, dur, dist)
+      WHERE w.id = v.id AND w.user_id = ${userId}::uuid`);
+  }
+}
+
 export async function patchPlanWorkout(userId: string, id: string, patch: Partial<PlanWorkoutInsert>): Promise<PlanWorkout | undefined> {
   const [w] = await db
     .update(planWorkouts)
