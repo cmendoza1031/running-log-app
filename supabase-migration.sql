@@ -197,6 +197,17 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
+-- ── Weekly schedule (added post-launch) ──────────────────────────────────────
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS weekly_schedule JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS weekly_hours_bucket TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS upcoming_races JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS peak_weekly_volume JSONB;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS average_power INTEGER;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS sport_type TEXT NOT NULL DEFAULT 'running';
+
 -- ============================================================
 -- Done! Your Vista Running schema is ready.
+--
+-- For schema changes after initial setup, use incremental files in:
+--   supabase/migrations/
 -- ============================================================

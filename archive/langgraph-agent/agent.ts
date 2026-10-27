@@ -94,6 +94,8 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
         case "on_tool_start": {
           const toolName = event.name;
           const statusMap: Record<string, string> = {
+            get_performance_summary: "Pulling your training snapshot...",
+            sync_strava_data: "Syncing latest workouts from Strava...",
             get_recent_runs: "Analyzing your recent training...",
             get_athlete_profile: "Loading your profile...",
             update_athlete_profile: "Updating your profile...",
@@ -105,7 +107,7 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
             mark_workout_complete: "Marking workout complete...",
             log_run: "Saving your run...",
             update_run_notes: "Saving your notes...",
-            search_runs: "Searching your run history...",
+            search_runs: "Searching your activity history...",
             get_health_logs: "Checking your health history...",
             log_health_status: "Logging your health status...",
           };
@@ -138,10 +140,10 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
 // ─── Non-streaming message history ───────────────────────────────────────────
 
 export async function getChatHistory(userId: string, threadId = "default") {
-  const agent = await getCoachAgent();
   const threadKey = `${userId}:${threadId}`;
 
   try {
+    const agent = await getCoachAgent();
     const state = await agent.getState({ configurable: { thread_id: threadKey } });
     const messages = (state.values?.messages as (HumanMessage | AIMessage)[]) ?? [];
 
@@ -151,7 +153,8 @@ export async function getChatHistory(userId: string, threadId = "default") {
         role: m instanceof HumanMessage ? "user" : "assistant",
         content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
       }));
-  } catch {
+  } catch (err) {
+    console.error("getChatHistory failed (returning empty history):", err);
     return [];
   }
 }

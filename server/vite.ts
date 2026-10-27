@@ -1,12 +1,9 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
-import { createServer as createViteServer, createLogger } from "vite";
+import { pathToFileURL } from "url";
 import { type Server } from "http";
-import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
-
-const viteLogger = createLogger();
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -19,7 +16,13 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+/** Dev only. Vite and its config are imported lazily so the production bundle never needs them. */
 export async function setupVite(app: Express, server: Server) {
+  const { createServer: createViteServer, createLogger } = await import("vite");
+  // Resolved at runtime (not bundled): the config pulls in dev-only plugins.
+  const configUrl = pathToFileURL(path.resolve(import.meta.dirname, "..", "vite.config.ts")).href;
+  const { default: viteConfig } = (await import(/* @vite-ignore */ configUrl)) as { default: Record<string, unknown> };
+  const viteLogger = createLogger();
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },

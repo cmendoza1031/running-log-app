@@ -22,6 +22,110 @@ import {
   type HealthLog,
   type InsertHealthLog,
 } from "@shared/schema";
+import {
+  isWeeklyHoursBucket,
+  planningHoursStringForBucket,
+  weeklyHoursBucketFromLegacyGoal,
+} from "@shared/weekly-hours-bucket";
+import { sanitizeAthleteFreeText } from "@shared/sanitize-athlete-text";
+
+function sanitizePeakAmount(raw: string): string {
+  const digitsDot = raw.replace(/[^\d.]/g, "");
+  if (!digitsDot) return "";
+  const firstDot = digitsDot.indexOf(".");
+  if (firstDot === -1) return digitsDot.slice(0, 24);
+  const head = digitsDot.slice(0, firstDot).replace(/\./g, "");
+  const tail = digitsDot.slice(firstDot + 1).replace(/\./g, "");
+  const combined = tail ? `${head}.${tail}` : head;
+  return combined.slice(0, 24);
+}
+
+/** When `upcomingRaces` is written, keep legacy `target_race` / `target_race_date` in sync for older consumers. */
+function syncTargetRaceFromUpcomingRaces(data: Record<string, unknown>): void {
+  const races = data.upcomingRaces;
+  if (!Array.isArray(races)) return;
+  const labels = races
+    .map((r: { label?: string }) => (typeof r?.label === "string" ? r.label : ""))
+    .filter((s: string) => s.trim().length > 0);
+  if (labels.length) {
+    data.targetRace = labels.join(" · ");
+    const dated = races.find(
+      (r: { date?: string | null }) => r && typeof r.date === "string" && r.date.trim().length > 0
+    ) as { date?: string } | undefined;
+    data.targetRaceDate = dated?.date?.trim().slice(0, 10) ?? null;
+  } else {
+    data.targetRace = null;
+    data.targetRaceDate = null;
+  }
+}
+
+function sanitizeProfileWrite(data: Record<string, unknown>): void {
+  if (data.targetRace !== undefined && data.targetRace !== null) {
+    const cleaned = sanitizeAthleteFreeText(String(data.targetRace));
+    data.targetRace = cleaned.length ? cleaned : null;
+  }
+  if (data.upcomingRaces !== undefined) {
+    if (!Array.isArray(data.upcomingRaces)) {
+      delete data.upcomingRaces;
+    } else {
+      const rows = data.upcomingRaces
+        .slice(0, 3)
+        .map((r: Record<string, unknown>) => ({
+          presetKey: typeof r.presetKey === "string" ? r.presetKey : null,
+          label: sanitizeAthleteFreeText(String(r.label ?? ""), 200),
+          date:
+            r.date != null && String(r.date).trim()
+              ? String(r.date).trim().slice(0, 10)
+              : null,
+        }))
+        .filter((row: { label: string }) => row.label.length > 0);
+      data.upcomingRaces = rows;
+      syncTargetRaceFromUpcomingRaces(data);
+    }
+  }
+  if (data.peakWeeklyVolume !== undefined && data.peakWeeklyVolume !== null) {
+    if (typeof data.peakWeeklyVolume === "object") {
+      const p = data.peakWeeklyVolume as Record<string, unknown>;
+      const next: Record<string, { amount: string; unit: string }> = {};
+      for (const key of ["running", "cycling", "swimming"] as const) {
+        const block = p[key];
+        if (!block || typeof block !== "object") continue;
+        const b = block as Record<string, unknown>;
+        const amount = sanitizePeakAmount(String(b.amount ?? ""));
+        if (!amount) continue;
+        if (key === "swimming") {
+          const u = b.unit === "meters" || b.unit === "hours" ? b.unit : "yards";
+          next[key] = { amount, unit: u };
+        } else {
+          const u = b.unit === "km" ? "km" : "mi";
+          next[key] = { amount, unit: u };
+        }
+      }
+      data.peakWeeklyVolume = Object.keys(next).length ? next : null;
+    }
+  }
+}
+
+/** Keep `weekly_hours_bucket` and `weekly_hours_goal` consistent on every write. */
+function applyWeeklyHoursSync(data: Record<string, unknown>): void {
+  const bucket = data.weeklyHoursBucket;
+  if (typeof bucket === "string" && bucket !== "" && isWeeklyHoursBucket(bucket)) {
+    data.weeklyHoursGoal = planningHoursStringForBucket(bucket);
+    return;
+  }
+  const goal = data.weeklyHoursGoal;
+  if (
+    goal != null &&
+    String(goal).trim() !== "" &&
+    (bucket === undefined || bucket === null || bucket === "")
+  ) {
+    const inferred = weeklyHoursBucketFromLegacyGoal(String(goal));
+    if (inferred) {
+      data.weeklyHoursBucket = inferred;
+      data.weeklyHoursGoal = planningHoursStringForBucket(inferred);
+    }
+  }
+}
 
 // ─── Database Connection ─────────────────────────────────────────────────────
 
@@ -50,6 +154,7 @@ export interface IStorage {
   getRunsByUserIdAndMonth(userId: string, year: number, month: number): Promise<Run[]>;
   getRunsByUserIdRecent(userId: string, days: number): Promise<Run[]>;
   getRunById(id: string, userId: string): Promise<Run | undefined>;
+  getRunByExternalId(userId: string, externalSource: string, externalId: string): Promise<Run | undefined>;
   updateRun(id: string, run: Partial<InsertRun>, userId: string): Promise<Run | undefined>;
   deleteRun(id: string, userId: string): Promise<boolean>;
 
@@ -101,6 +206,8 @@ export class SupabaseStorage implements IStorage {
     const existing = await this.getProfile(userId);
     // Cast sports array to unknown to avoid Drizzle's strict JSONB generic inference
     const data = { ...profile } as Record<string, unknown>;
+    sanitizeProfileWrite(data);
+    applyWeeklyHoursSync(data);
     if (existing) {
       const result = await db
         .update(profiles)
@@ -123,7 +230,7 @@ export class SupabaseStorage implements IStorage {
   async createRun(insertRun: InsertRun, userId: string): Promise<Run> {
     const result = await db
       .insert(runs)
-      .values({ ...insertRun, userId })
+      .values({ ...insertRun, userId } as typeof runs.$inferInsert)
       .returning();
     return result[0];
   }
@@ -164,10 +271,25 @@ export class SupabaseStorage implements IStorage {
     return result[0];
   }
 
+  async getRunByExternalId(userId: string, externalSource: string, externalId: string): Promise<Run | undefined> {
+    const result = await db
+      .select()
+      .from(runs)
+      .where(
+        and(
+          eq(runs.userId, userId),
+          eq(runs.externalSource, externalSource),
+          eq(runs.externalId, externalId),
+        ),
+      )
+      .limit(1);
+    return result[0];
+  }
+
   async updateRun(id: string, run: Partial<InsertRun>, userId: string): Promise<Run | undefined> {
     const result = await db
       .update(runs)
-      .set({ ...run, updatedAt: new Date() })
+      .set({ ...run, updatedAt: new Date() } as Partial<typeof runs.$inferInsert>)
       .where(and(eq(runs.id, id), eq(runs.userId, userId)))
       .returning();
     return result[0];
