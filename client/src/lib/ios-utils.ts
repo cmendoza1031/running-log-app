@@ -138,7 +138,7 @@ export class IOSAppManager {
 
     try {
       await IOSStatusBarManager.setLightContent();
-      await StatusBar.setBackgroundColor({ color: '#0a0a0f' }).catch(() => {});
+      await StatusBar.setBackgroundColor({ color: '#000000' }).catch(() => {});
       
       // Add app state change listeners
       App.addListener('appStateChange', ({ isActive }) => {

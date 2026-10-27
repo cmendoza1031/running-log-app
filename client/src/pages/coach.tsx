@@ -1,405 +1,303 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Send, Trash2, Loader2, Bot, ChevronRight, Activity, Calendar, TrendingUp, Zap } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getAccessToken } from "@/lib/supabase";
-import { useAuth } from "@/contexts/AuthContext";
+import { ArrowUp, Loader2, SquarePen, Sparkles, CalendarRange, BatteryLow, Gauge, Flag, Activity } from "lucide-react";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { apiUrl, authHeaders, apiJson } from "@/lib/queryClient";
+import { useProfile } from "@/lib/vista";
 import { IOSFeedbackManager } from "@/lib/ios-utils";
-import { useToast } from "@/hooks/use-toast";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import type { Dashboard } from "@/lib/types";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
-  toolStatuses?: string[];
-  isStreaming?: boolean;
+  streaming?: boolean;
+  status?: string | null;
+  error?: boolean;
 }
 
-// ─── Suggested prompts ────────────────────────────────────────────────────────
-
-const SUGGESTED_PROMPTS = [
-  { icon: TrendingUp, text: "Analyze my last 2 weeks of training" },
-  { icon: Calendar, text: "Build me a training plan for a 5K" },
-  { icon: Activity, text: "Am I running too hard on easy days?" },
-  { icon: Zap, text: "How should I taper for my upcoming race?" },
-];
-
-// ─── Message Bubble ───────────────────────────────────────────────────────────
-
-function MessageBubble({ message }: { message: Message }) {
-  const isUser = message.role === "user";
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
-      className={`flex ${isUser ? "justify-end" : "justify-start"} mb-3`}
-    >
-      {!isUser && (
-        <div className="w-8 h-8 rounded-2xl bg-gradient-to-br from-skyblue to-blue-600 flex items-center justify-center mr-2 mt-0.5 flex-shrink-0 shadow-sm">
-          <Bot size={14} className="text-white" />
-        </div>
-      )}
-
-      <div className={`max-w-[82%] ${isUser ? "items-end" : "items-start"} flex flex-col gap-1`}>
-        {/* Tool status pills */}
-        {message.toolStatuses && message.toolStatuses.length > 0 && (
-          <div className="flex flex-col gap-1 mb-1">
-            {message.toolStatuses.map((status, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-1.5 bg-skyblue/10 text-skyblue text-xs px-3 py-1.5 rounded-xl"
-              >
-                <Loader2 size={10} className="animate-spin" />
-                {status}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div
-          className={`px-4 py-3 rounded-2xl shadow-sm ${
-            isUser
-              ? "bg-skyblue text-white rounded-br-md"
-              : "bg-surface-raised text-foreground rounded-bl-md"
-          }`}
-        >
-          {isUser ? (
-            <p className="text-sm leading-relaxed">{message.content}</p>
-          ) : (
-            <div className="text-sm leading-relaxed prose prose-sm max-w-none prose-p:my-1 prose-headings:mt-3 prose-headings:mb-1 prose-li:my-0.5 prose-code:bg-skyblue/10 prose-code:text-blue-700 prose-code:px-1 prose-code:rounded prose-table:text-xs">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {message.content}
-              </ReactMarkdown>
-              {message.isStreaming && (
-                <span className="inline-block w-1.5 h-4 bg-skyblue ml-0.5 animate-pulse rounded-sm" />
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </motion.div>
-  );
+interface HistoryResponse {
+  threadId: string | null;
+  title?: string | null;
+  messages: { id: string; role: "user" | "assistant"; content: string }[];
 }
 
-// ─── Typing indicator ────────────────────────────────────────────────────────
-
-function TypingIndicator() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      className="flex justify-start mb-3"
-    >
-      <div className="w-8 h-8 rounded-2xl bg-gradient-to-br from-skyblue to-blue-600 flex items-center justify-center mr-2 flex-shrink-0 shadow-sm">
-        <Bot size={14} className="text-white" />
-      </div>
-      <div className="bg-surface-raised rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
-        <div className="flex gap-1 items-center h-4">
-          {[0, 0.15, 0.3].map((delay, i) => (
-            <div
-              key={i}
-              className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
-              style={{ animationDelay: `${delay}s` }}
-            />
-          ))}
-        </div>
-      </div>
-    </motion.div>
-  );
+function starterPrompts(hasPlan: boolean, race: string | null) {
+  const list = [
+    hasPlan
+      ? { icon: CalendarRange, text: "How did this week go, and what matters most next week?" }
+      : { icon: CalendarRange, text: race ? `Build my training plan for the ${race}` : "Build me a training plan" },
+    { icon: Activity, text: "Review my last workout in detail" },
+    { icon: BatteryLow, text: "I'm feeling run down — adjust my next few days" },
+    { icon: Gauge, text: "Are my zones and thresholds right? What should I test?" },
+    { icon: Flag, text: race ? `What should my pacing and fueling be for the ${race}?` : "What race would suit my current fitness?" },
+  ];
+  return list;
 }
-
-// ─── Main Coach Page ──────────────────────────────────────────────────────────
 
 export default function CoachPage() {
+  const qc = useQueryClient();
+  const { data: profile } = useProfile();
+  const { data: dash } = useQuery<Dashboard>({ queryKey: ["/api/dashboard"] });
+  const [threadId, setThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [isThinking, setIsThinking] = useState(false);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const qc = useQueryClient();
+  const autoPromptHandled = useRef(false);
 
-  const scrollToBottom = useCallback((smooth = true) => {
-    messagesEndRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
-  }, []);
+  const scrollDown = useCallback((smooth = true) => endRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "end" }), []);
 
-  // Load history on mount
   useEffect(() => {
-    const load = async () => {
+    let cancelled = false;
+    (async () => {
       try {
-        const token = await getAccessToken();
-        if (!token) { setIsLoadingHistory(false); return; }
-        const res = await fetch("/api/agent/history?threadId=default", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const history = await res.json() as { role: string; content: string }[];
-          setMessages(history.map((m, i) => ({
-            id: `hist-${i}`,
-            role: m.role as "user" | "assistant",
-            content: m.content,
-          })));
-        }
+        const h = await apiJson<HistoryResponse>("GET", "/api/coach/history");
+        if (cancelled) return;
+        setThreadId(h.threadId);
+        setMessages(h.messages.map((m) => ({ id: m.id, role: m.role, content: m.content })));
+      } catch {
+        /* empty history */
       } finally {
-        setIsLoadingHistory(false);
-        setTimeout(() => scrollToBottom(false), 100);
+        if (!cancelled) {
+          setLoading(false);
+          setTimeout(() => scrollDown(false), 50);
+        }
       }
+    })();
+    return () => {
+      cancelled = true;
     };
-    load();
-  }, [scrollToBottom]);
+  }, [scrollDown]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
+    scrollDown();
+  }, [messages, scrollDown]);
 
-  const sendMessage = useCallback(async (text: string) => {
-    if (!text.trim() || isThinking) return;
-
-    await IOSFeedbackManager.lightImpact();
-
-    const userMsg: Message = { id: `u-${Date.now()}`, role: "user", content: text };
-    const assistantMsgId = `a-${Date.now()}`;
-
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
-    setIsThinking(true);
-
-    // Optimistically add streaming assistant message
-    setMessages((prev) => [...prev, {
-      id: assistantMsgId,
-      role: "assistant",
-      content: "",
-      toolStatuses: [],
-      isStreaming: true,
-    }]);
-
-    try {
-      const token = await getAccessToken();
-      abortRef.current = new AbortController();
-
-      const res = await fetch("/api/agent/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ message: text, threadId: "default" }),
-        signal: abortRef.current.signal,
-      });
-
-      if (!res.ok || !res.body) throw new Error("Stream failed");
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const raw = line.slice(6).trim();
-          if (!raw) continue;
-
-          try {
-            const event = JSON.parse(raw) as {
-              type: string;
-              content?: string;
-              name?: string;
-              status?: string;
-            };
-
-            if (event.type === "token") {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMsgId
-                    ? { ...m, content: m.content + (event.content ?? ""), toolStatuses: [] }
-                    : m
-                )
-              );
-            } else if (event.type === "tool_start") {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMsgId
-                    ? { ...m, toolStatuses: [...(m.toolStatuses ?? []), event.status ?? event.name ?? ""] }
-                    : m
-                )
-              );
-            } else if (event.type === "tool_end") {
-              // Keep the last status shown until tokens arrive
-            } else if (event.type === "done") {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMsgId ? { ...m, isStreaming: false, toolStatuses: [] } : m
-                )
-              );
-              // Invalidate run/plan queries so calendar refreshes
-              qc.invalidateQueries({ queryKey: ["/api/runs"] });
-              qc.invalidateQueries({ queryKey: ["/api/plans"] });
-              await IOSFeedbackManager.successNotification();
-            } else if (event.type === "error") {
-              throw new Error(event.content);
-            }
-          } catch { /* skip malformed line */ }
+  const send = useCallback(
+    async (text: string) => {
+      const msg = text.trim();
+      if (!msg || busy) return;
+      void IOSFeedbackManager.lightImpact();
+      const aid = `a-${Date.now()}`;
+      setMessages((prev) => [...prev, { id: `u-${Date.now()}`, role: "user", content: msg }, { id: aid, role: "assistant", content: "", streaming: true, status: "Thinking…" }]);
+      setInput("");
+      setBusy(true);
+      let committed = "";
+      let draft = "";
+      const update = (patch: Partial<Message>) => setMessages((prev) => prev.map((m) => (m.id === aid ? { ...m, ...patch } : m)));
+      const render = () => update({ content: (committed + (committed && draft ? "\n\n" : "") + draft).trim() });
+      try {
+        const res = await fetch(apiUrl("/api/coach/chat"), {
+          method: "POST",
+          headers: await authHeaders(true),
+          body: JSON.stringify({ message: msg, threadId }),
+        });
+        if (!res.ok || !res.body) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.message ?? "The coach is unavailable right now.");
         }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+        let changed = false;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            let ev: { type: string; content?: string; status?: string; threadId?: string; changedData?: boolean };
+            try {
+              ev = JSON.parse(line.slice(6));
+            } catch {
+              continue;
+            }
+            switch (ev.type) {
+              case "thread":
+                if (ev.threadId) setThreadId(ev.threadId);
+                break;
+              case "token":
+                draft += ev.content ?? "";
+                update({ status: null });
+                render();
+                break;
+              case "iteration_done":
+                if (ev.content) committed = committed ? `${committed}\n\n${ev.content}` : ev.content;
+                draft = "";
+                render();
+                break;
+              case "iteration_reset":
+                draft = "";
+                render();
+                break;
+              case "progress":
+                if (ev.content) update({ status: ev.content.slice(0, 140) });
+                break;
+              case "tool_start":
+                update({ status: ev.status ?? "Working…" });
+                break;
+              case "done":
+                changed = !!ev.changedData;
+                break;
+              case "error":
+                throw new Error(ev.content ?? "Something went wrong");
+            }
+          }
+        }
+        update({ streaming: false, status: null });
+        if (!committed && !draft) update({ content: "Done." });
+        if (changed) void qc.invalidateQueries();
+        void IOSFeedbackManager.successNotification();
+      } catch (err) {
+        update({ streaming: false, status: null, error: true, content: (committed + draft).trim() || (err as Error).message });
+        void IOSFeedbackManager.errorNotification();
+      } finally {
+        setBusy(false);
       }
-    } catch (err) {
-      if ((err as Error).name === "AbortError") return;
-      console.error("Chat error:", err);
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantMsgId
-            ? { ...m, content: "Sorry, I ran into an issue. Please try again.", isStreaming: false, toolStatuses: [] }
-            : m
-        )
-      );
-      await IOSFeedbackManager.errorNotification();
-    } finally {
-      setIsThinking(false);
-    }
-  }, [isThinking, qc]);
+    },
+    [busy, qc, threadId],
+  );
 
-  const clearHistory = async () => {
-    await IOSFeedbackManager.heavyImpact();
-    const token = await getAccessToken();
-    if (!token) return;
-    await fetch("/api/agent/history?threadId=default", {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
+  // Deep links: /coach?prompt=plan or ?prompt=<text>
+  useEffect(() => {
+    if (loading || autoPromptHandled.current) return;
+    const p = new URLSearchParams(window.location.search).get("prompt");
+    if (!p) return;
+    autoPromptHandled.current = true;
+    window.history.replaceState({}, "", "/coach");
+    if (p === "plan") {
+      void send(profile?.targetRace ? `Build my training plan for the ${profile.targetRace}` : "Build me a training plan");
+    } else {
+      setInput(p);
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [loading, send, profile?.targetRace]);
+
+  const newChat = async () => {
+    if (busy) return;
+    void IOSFeedbackManager.mediumImpact();
+    const t = await apiJson<{ id: string }>("POST", "/api/coach/threads");
+    setThreadId(t.id);
     setMessages([]);
-    toast({ title: "Conversation cleared" });
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage(input);
-    }
-  };
-
-  const isEmptyChat = messages.length === 0 && !isLoadingHistory;
+  const empty = !loading && messages.length === 0;
+  const firstName = profile?.fullName?.split(" ")[0];
 
   return (
-    <div className="flex flex-col h-screen bg-surface">
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-14 pb-4 bg-surface">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Your Coach</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {user?.user_metadata?.full_name
-              ? `Training with ${user.user_metadata.full_name.split(" ")[0]}`
-              : "AI-powered training guidance"}
-          </p>
+    <div className="flex h-full min-h-0 flex-col bg-black">
+      <div className="page-top flex shrink-0 items-center justify-between px-4 pb-2">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-gradient-to-br from-[#0A84FF] to-[#5E5CE6] shadow-[0_0_20px_rgba(10,132,255,0.45)]">
+            <Sparkles size={17} className="text-white" />
+          </div>
+          <div>
+            <div className="text-[17px] font-bold leading-tight text-ink-1">Coach</div>
+            <div className="text-[11px] text-ink-3">Knows your training, zones & plan</div>
+          </div>
         </div>
         {messages.length > 0 && (
-          <button
-            onClick={clearHistory}
-            className="p-2 rounded-xl text-muted-foreground active:bg-surface-elevated transition-colors"
-          >
-            <Trash2 size={18} />
+          <button type="button" onClick={() => void newChat()} className="press rounded-full bg-white/[0.08] p-2 text-ink-2" aria-label="New conversation">
+            <SquarePen size={17} />
           </button>
         )}
       </div>
 
-      {/* Messages */}
-      <div
-        className="flex-1 overflow-y-auto px-4 pt-2 pb-4"
-        data-scroll-container
-        style={{ WebkitOverflowScrolling: "touch" }}
-      >
-        {isLoadingHistory ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 size={24} className="text-skyblue animate-spin" />
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4" style={{ WebkitOverflowScrolling: "touch" }}>
+        {loading ? (
+          <div className="flex h-40 items-center justify-center">
+            <Loader2 className="animate-spin text-ink-3" />
           </div>
-        ) : isEmptyChat ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex flex-col items-center justify-center h-full pb-8"
-          >
-            {/* Coach avatar */}
-            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-skyblue to-blue-600 flex items-center justify-center shadow-lg mb-5">
-              <Bot size={36} className="text-white" />
-            </div>
-            <h2 className="text-xl font-bold text-foreground mb-1">Your AI Coach</h2>
-            <p className="text-muted-foreground text-sm text-center max-w-xs mb-8">
-              I have access to all your training data. Ask me anything, or I'll proactively analyze your training.
+        ) : empty ? (
+          <div className="pb-4 pt-6">
+            <h2 className="text-[24px] font-bold leading-tight text-ink-1">
+              {firstName ? `Hey ${firstName}.` : "Hey."} <span className="text-ink-3">What are we working on?</span>
+            </h2>
+            <p className="mt-2 text-[14px] leading-relaxed text-ink-2">
+              I can see your workouts, zones, fitness and calendar — and I can change your plan directly. Ask anything, from "why am I slow on hills" to "I only have 40 minutes today".
             </p>
-
-            {/* Suggestion cards */}
-            <div className="w-full space-y-2">
-              {SUGGESTED_PROMPTS.map(({ icon: Icon, text }) => (
-                <button
-                  key={text}
-                  onClick={() => { sendMessage(text); IOSFeedbackManager.lightImpact(); }}
-                  className="w-full flex items-center bg-surface-raised rounded-2xl px-4 py-3.5 shadow-sm text-left active:scale-95 transition-transform"
-                >
-                  <div className="w-8 h-8 rounded-xl bg-skyblue/10 flex items-center justify-center mr-3 flex-shrink-0">
-                    <Icon size={15} className="text-skyblue" />
-                  </div>
-                  <span className="text-sm text-foreground/80 font-medium flex-1">{text}</span>
-                  <ChevronRight size={14} className="text-muted-foreground" />
+            <div className="mt-5 space-y-2">
+              {starterPrompts(!!dash?.plan, profile?.targetRace ?? dash?.race?.label ?? null).map(({ icon: Icon, text }) => (
+                <button key={text} type="button" onClick={() => void send(text)} className="press card flex w-full items-center gap-3 px-4 py-3.5 text-left">
+                  <Icon size={17} className="shrink-0 text-primary" />
+                  <span className="text-[14px] font-medium text-ink-1">{text}</span>
                 </button>
               ))}
             </div>
-          </motion.div>
+          </div>
         ) : (
-          <div className="space-y-1 pt-2">
-            <AnimatePresence initial={false}>
-              {messages.map((msg) => (
-                <MessageBubble key={msg.id} message={msg} />
-              ))}
-            </AnimatePresence>
-            {isThinking && messages[messages.length - 1]?.content === "" && !messages[messages.length - 1]?.isStreaming && (
-              <TypingIndicator />
-            )}
+          <div className="space-y-4 py-3">
+            {messages.map((m) => (
+              <Bubble key={m.id} m={m} />
+            ))}
           </div>
         )}
-        <div ref={messagesEndRef} />
+        <div ref={endRef} className="h-2" />
       </div>
 
-      {/* Input */}
-      <div className="px-4 pb-28 pt-2 bg-surface border-t border-border">
-        <div className="flex items-end gap-2 bg-surface-raised rounded-2xl shadow-sm px-4 py-3">
+      <div className="shrink-0 px-3 pb-[calc(84px+env(safe-area-inset-bottom))] pt-2">
+        <div className="flex items-end gap-2 rounded-[22px] border border-hairline bg-[#111113] py-1.5 pl-4 pr-1.5">
           <textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask your coach anything..."
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void send(input);
+              }
+            }}
             rows={1}
-            className="flex-1 resize-none bg-transparent text-foreground placeholder-muted-foreground text-sm outline-none leading-relaxed max-h-28"
+            placeholder="Message your coach"
+            className="max-h-32 min-h-[36px] flex-1 resize-none bg-transparent py-2 text-[16px] leading-snug text-ink-1 outline-none placeholder:text-ink-3"
             style={{ fieldSizing: "content" } as React.CSSProperties}
           />
           <button
-            onClick={() => sendMessage(input)}
-            disabled={!input.trim() || isThinking}
-            className="w-9 h-9 bg-skyblue rounded-xl flex items-center justify-center flex-shrink-0 active:scale-90 transition-transform disabled:opacity-40"
+            type="button"
+            onClick={() => void send(input)}
+            disabled={!input.trim() || busy}
+            className="press flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-white disabled:bg-white/[0.12] disabled:text-ink-3"
+            aria-label="Send"
           >
-            {isThinking ? (
-              <Loader2 size={16} className="text-white animate-spin" />
-            ) : (
-              <Send size={15} className="text-white" />
-            )}
+            {busy ? <Loader2 size={17} className="animate-spin" /> : <ArrowUp size={18} strokeWidth={2.5} />}
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Bubble({ m }: { m: Message }) {
+  if (m.role === "user") {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[85%] whitespace-pre-wrap rounded-[20px] rounded-br-md bg-primary px-4 py-2.5 text-[15px] leading-snug text-white">{m.content}</div>
+      </div>
+    );
+  }
+  return (
+    <div className="max-w-full">
+      {m.status && (
+        <div className="mb-2 flex items-center gap-2 text-[13px] text-ink-3">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+          </span>
+          <span className="line-clamp-2">{m.status}</span>
+        </div>
+      )}
+      {m.content && (
+        <div className={`coach-md text-[15px] leading-relaxed ${m.error ? "text-bad" : "text-ink-2"}`}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+          {m.streaming && !m.status && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-primary align-middle" />}
+        </div>
+      )}
     </div>
   );
 }

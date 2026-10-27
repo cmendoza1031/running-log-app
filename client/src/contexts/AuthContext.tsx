@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { User, Session } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import { supabase, updateCachedToken } from "@/lib/supabase";
+import { apiUrl } from "@/lib/queryClient";
 import { canUseNativeAppleSignIn, signInWithNativeApple } from "@/lib/native-apple-auth";
 
 interface AuthContextValue {
@@ -22,15 +23,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
-      setLoading(false);
-    });
-
-    // Listen for auth state changes
+    // onAuthStateChange fires immediately with INITIAL_SESSION on subscribe (Supabase v2),
+    // so we skip the separate getSession() call — that was creating a second concurrent lock
+    // acquisition which caused the 5s timeout / "lock stolen" error in WKWebView.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      updateCachedToken(session?.access_token ?? null);
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -54,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Create profile after sign-up
     if (data.user) {
-      await fetch("/api/profile", {
+      await fetch(apiUrl("/api/profile"), {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

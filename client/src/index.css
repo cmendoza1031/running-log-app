@@ -1,156 +1,213 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Vista UI — single dark palette (not a light/dark toggle) ─────────────── */
+/* ─── Vista — black canvas, vivid data ─────────────────────────────────────────
+   One dark theme (the app is dark-only). Data colors are validated for CVD and
+   lightness on the card surface; brighter "tint" variants are for icons/accents. */
 :root,
 .dark {
-  --background: #0a0a0f;
-  --foreground: #e8e8f0;
-  --card: #14141f;
-  --card-foreground: #e0e0ea;
-  --popover: #14141f;
-  --popover-foreground: #e8e8f0;
-  --primary: hsl(203, 88%, 53%);
+  --background: #000000;
+  --foreground: #f5f5f7;
+  --card: #0d0d0f;
+  --card-foreground: #f5f5f7;
+  --popover: #161618;
+  --popover-foreground: #f5f5f7;
+  --primary: #0a84ff;
   --primary-foreground: #ffffff;
-  --secondary: #1e1e2e;
-  --secondary-foreground: #e8e8f0;
-  --muted: #1a1a28;
-  --muted-foreground: #6b6b80;
-  --accent: hsl(203, 70%, 12%);
-  --accent-foreground: hsl(203, 88%, 60%);
-  --destructive: hsl(0, 85%, 60%);
+  --secondary: #1c1c1e;
+  --secondary-foreground: #f5f5f7;
+  --muted: #1c1c1e;
+  --muted-foreground: #8e8e93;
+  --accent: rgba(10, 132, 255, 0.14);
+  --accent-foreground: #64a8ff;
+  --destructive: #ff453a;
   --destructive-foreground: #ffffff;
-  --border: #2a2a3a;
-  --input: #1e1e2e;
-  --ring: hsl(203, 88%, 53%);
-  --chart-1: hsl(203, 88%, 53%);
-  --chart-2: hsl(160, 84%, 44%);
-  --chart-3: hsl(42, 92%, 56%);
-  --chart-4: hsl(147, 78%, 42%);
-  --chart-5: hsl(341, 75%, 55%);
-  --sidebar: #14141f;
-  --sidebar-foreground: #e0e0ea;
-  --sidebar-primary: hsl(203, 88%, 53%);
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: hsl(203, 70%, 12%);
-  --sidebar-accent-foreground: hsl(203, 88%, 60%);
-  --sidebar-border: #2a2a3a;
-  --sidebar-ring: hsl(203, 88%, 53%);
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
-  --font-serif: Georgia, serif;
-  --font-mono: Menlo, monospace;
-  --radius: 1.3rem;
-  --shadow-2xs: none;
-  --shadow-xs: 0 1px 2px rgba(0,0,0,0.3);
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
-  --shadow: 0 2px 6px rgba(0,0,0,0.4);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
-  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
-  --shadow-xl: 0 12px 40px rgba(0,0,0,0.5);
-  --shadow-2xl: 0 20px 60px rgba(0,0,0,0.6);
-  --tracking-normal: 0em;
-  --spacing: 0.25rem;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: #1c1c1e;
+  --ring: #0a84ff;
+  --radius: 1rem;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
 
-  /* App-level semantic tokens */
-  --surface: #0a0a0f;
-  --surface-raised: #14141f;
-  --surface-elevated: #1e1e2e;
-  --sky-blue: hsl(203, 88%, 53%);
-  --sky-blue-light: hsl(203, 88%, 65%);
-  --sky-blue-dark: hsl(203, 88%, 40%);
+  /* Surfaces */
+  --surface: #000000;
+  --surface-raised: #0d0d0f;
+  --surface-elevated: #1c1c1e;
+  --hairline: rgba(255, 255, 255, 0.07);
+  --grid: rgba(255, 255, 255, 0.06);
+
+  /* Text */
+  --text-1: #f5f5f7;
+  --text-2: #a1a1a6;
+  --text-3: #6e6e73;
+
+  /* Legacy aliases used by older components */
+  --sky-blue: #0a84ff;
+  --sky-blue-light: #64a8ff;
+  --sky-blue-dark: #0060df;
+
+  /* Sports — data marks / tints for icons */
+  --swim: #1a9fd8;
+  --bike: #a45cf0;
+  --run: #e26a26;
+  --swim-tint: #5ac8fa;
+  --bike-tint: #c38bff;
+  --run-tint: #ff8a47;
+
+  /* Fitness / fatigue / form */
+  --ctl: #3a86ff;
+  --atl: #e0457b;
+  --tsb: #aa8a12;
+
+  /* Status */
+  --good: #30d158;
+  --warn: #ffd60a;
+  --bad: #ff453a;
 }
 
 @layer base {
   * {
     @apply border-border;
+    -webkit-tap-highlight-color: transparent;
   }
-
   html {
-    background: var(--surface);
+    background: #000;
     color-scheme: dark;
     min-height: 100dvh;
   }
-
   body {
     @apply font-sans antialiased text-foreground;
-    background: var(--surface);
+    background: #000;
     min-height: 100dvh;
     overscroll-behavior: none;
+    font-feature-settings: "cv11", "ss01";
   }
-
   #root {
     min-height: 100dvh;
-    background: var(--surface);
+    background: #000;
+  }
+  input,
+  textarea,
+  select {
+    font-size: 16px; /* prevents iOS zoom on focus */
   }
 }
 
-/* Safe area padding utilities */
-.safe-top { padding-top: env(safe-area-inset-top, 0px); }
-.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
-
-/* Custom iOS-like input styles */
-.ios-input {
-  -webkit-appearance: none;
-  transition: all 0.3s ease;
+@layer components {
+  .card {
+    background: var(--surface-raised);
+    border: 1px solid var(--hairline);
+    border-radius: 20px;
+  }
+  .card-glow {
+    background: radial-gradient(120% 140% at 0% 0%, rgba(10, 132, 255, 0.16) 0%, rgba(10, 132, 255, 0) 55%), var(--surface-raised);
+    border: 1px solid rgba(10, 132, 255, 0.22);
+    border-radius: 20px;
+    box-shadow: 0 0 40px rgba(10, 132, 255, 0.08);
+  }
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+  .press {
+    transition: transform 120ms ease, opacity 120ms ease;
+  }
+  .press:active {
+    transform: scale(0.97);
+    opacity: 0.85;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .page {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 16px calc(96px + env(safe-area-inset-bottom));
+  }
+  .page-top {
+    padding-top: max(16px, calc(env(safe-area-inset-top) + 8px));
+  }
 }
 
-.ios-input:focus {
-  transform: scale(1.02);
-  box-shadow: 0 0 0 3px rgba(56, 163, 241, 0.2);
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Scroll wheel number inputs */
-.scroll-wheel {
-  -webkit-appearance: none;
-  -moz-appearance: textfield;
+/* Markdown in coach bubbles */
+.coach-md p {
+  margin: 0.35em 0;
+}
+.coach-md ul,
+.coach-md ol {
+  margin: 0.35em 0;
+  padding-left: 1.15em;
+}
+.coach-md ul {
+  list-style: disc;
+}
+.coach-md ol {
+  list-style: decimal;
+}
+.coach-md li {
+  margin: 0.2em 0;
+}
+.coach-md strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.coach-md h1,
+.coach-md h2,
+.coach-md h3 {
+  font-size: 0.95em;
+  font-weight: 700;
+  margin: 0.8em 0 0.3em;
+  color: var(--text-1);
+}
+.coach-md table {
+  font-size: 0.85em;
+  border-collapse: collapse;
+  margin: 0.5em 0;
+}
+.coach-md td,
+.coach-md th {
+  border-bottom: 1px solid var(--hairline);
+  padding: 4px 8px 4px 0;
+  text-align: left;
+}
+.coach-md code {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 1px 5px;
+  font-size: 0.9em;
 }
 
-.scroll-wheel::-webkit-outer-spin-button,
-.scroll-wheel::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: 200px 0;
+  }
 }
-
-/* ─── Activity type colors (dark-mode optimized) ─────────────────────────── */
-.run-type-easy {
-  background: linear-gradient(135deg, #1a2a3a, #1e3a50);
-}
-
-.run-type-tempo {
-  background: linear-gradient(135deg, #2a2518, #3a3020);
-}
-
-.run-type-long {
-  background: linear-gradient(135deg, #241a30, #301e40);
-}
-
-.run-type-interval {
-  background: linear-gradient(135deg, #2a1518, #401a20);
-}
-
-.run-type-trail {
-  background: linear-gradient(135deg, #1a2a1a, #203020);
-}
-
-.run-type-threshold {
-  background: linear-gradient(135deg, #2a2810, #3a3518);
-}
-
-.run-type-workout {
-  background: linear-gradient(135deg, #2a1a25, #401e35);
-}
-
-.run-type-race {
-  background: linear-gradient(135deg, #301518, #451a20);
-}
-
-/* Calendar day hover effects */
-.calendar-day {
-  transition: all 0.2s ease;
-}
-
-.calendar-day:hover {
-  transform: scale(1.05);
+.skeleton {
+  background: linear-gradient(90deg, #111 0px, #1c1c1e 60px, #111 120px);
+  background-size: 400px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: 12px;
 }

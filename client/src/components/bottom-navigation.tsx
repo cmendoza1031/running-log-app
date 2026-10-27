@@ -1,62 +1,38 @@
 import { useLocation, Link } from "wouter";
-import { Home, Calendar, Plus, Bot, User } from "lucide-react";
+import { Home, CalendarDays, Sparkles, TrendingUp, User } from "lucide-react";
 import { IOSFeedbackManager } from "@/lib/ios-utils";
 
 const tabs = [
-  { path: "/", icon: Home, label: "Home" },
-  { path: "/journey", icon: Calendar, label: "Journey" },
-  { path: "/coach", icon: Bot, label: "Coach", highlight: true },
-  { path: "/log", icon: Plus, label: "Log" },
-  { path: "/settings", icon: User, label: "Profile" },
+  { path: "/", icon: Home, label: "Today" },
+  { path: "/calendar", icon: CalendarDays, label: "Calendar" },
+  { path: "/coach", icon: Sparkles, label: "Coach" },
+  { path: "/progress", icon: TrendingUp, label: "Progress" },
+  { path: "/profile", icon: User, label: "Profile" },
 ];
 
 export default function BottomNavigation() {
   const [location] = useLocation();
-
+  const active = (p: string) => (p === "/" ? location === "/" : location.startsWith(p));
   return (
-    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 max-w-sm w-full bg-surface-raised/95 backdrop-blur-xl border-t border-border px-2 pb-safe" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
-      <div className="flex justify-around items-center py-2">
-        {tabs.map((tab) => {
-          const isActive = location === tab.path;
-          const Icon = tab.icon;
-
-          if (tab.highlight) {
-            return (
-              <Link key={tab.path} href={tab.path}>
-                <button
-                  onClick={() => IOSFeedbackManager.mediumImpact()}
-                  className="flex flex-col items-center py-1 px-3 transition-all active:scale-90"
-                  data-testid={`tab-${tab.label.toLowerCase()}`}
-                >
-                  <div
-                    className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-0.5 shadow-md transition-all ${
-                      isActive
-                        ? "bg-gradient-to-br from-skyblue to-blue-600 shadow-blue-200"
-                        : "bg-gradient-to-br from-skyblue/80 to-blue-600/80"
-                    }`}
-                  >
-                    <Icon size={22} className="text-white" />
-                  </div>
-                  <span className={`text-[10px] font-semibold ${isActive ? "text-skyblue" : "text-muted-foreground"}`}>
-                    {tab.label}
-                  </span>
-                </button>
-              </Link>
-            );
-          }
-
+    <nav
+      className="fixed bottom-0 left-1/2 z-40 w-full max-w-md -translate-x-1/2 border-t border-white/[0.06] bg-black/80 backdrop-blur-2xl"
+      style={{ paddingBottom: "max(6px, env(safe-area-inset-bottom))" }}
+    >
+      <div className="flex items-center justify-around px-2 pt-1.5">
+        {tabs.map(({ path, icon: Icon, label }) => {
+          const on = active(path);
           return (
-            <Link key={tab.path} href={tab.path}>
-              <button
-                onClick={() => IOSFeedbackManager.lightImpact()}
-                className={`flex flex-col items-center py-2 px-3 transition-colors active:scale-90 ${
-                  isActive ? "text-skyblue" : "text-muted-foreground"
-                }`}
-                data-testid={`tab-${tab.label.toLowerCase()}`}
-              >
-                <Icon size={20} className="mb-1" strokeWidth={isActive ? 2.5 : 1.8} />
-                <span className={`text-[10px] font-semibold`}>{tab.label}</span>
-              </button>
+            <Link
+              key={path}
+              href={path}
+              onClick={() => void IOSFeedbackManager.lightImpact()}
+              className={`press flex w-16 flex-col items-center gap-0.5 py-1 ${on ? "text-ink-1" : "text-ink-3"}`}
+              data-testid={`tab-${label.toLowerCase()}`}
+            >
+              <div className={`flex h-8 w-12 items-center justify-center rounded-full transition-colors ${on ? (path === "/coach" ? "bg-primary/25" : "bg-white/[0.1]") : ""}`}>
+                <Icon size={21} strokeWidth={on ? 2.4 : 1.9} className={on && path === "/coach" ? "text-[#64a8ff]" : ""} />
+              </div>
+              <span className="text-[10px] font-semibold">{label}</span>
             </Link>
           );
         })}

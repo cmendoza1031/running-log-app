@@ -1,12 +1,13 @@
-import { useState, useEffect, useLayoutEffect } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mail, Lock, User, ArrowRight, Zap, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, User, ArrowRight, Eye, EyeOff } from "lucide-react";
 import type { UseFormRegisterReturn } from "react-hook-form";
 import { useAuth } from "@/contexts/AuthContext";
+import { BrandMark } from "@/components/kit";
 import { IOSFeedbackManager } from "@/lib/ios-utils";
 import {
   AUTH_SCROLL_CONTAINER_PADDING_BOTTOM,
@@ -83,6 +84,8 @@ export default function AuthPage() {
   const [showSignInPassword, setShowSignInPassword] = useState(false);
   const [showSignUpPassword, setShowSignUpPassword] = useState(false);
   const [showSignUpConfirmPassword, setShowSignUpConfirmPassword] = useState(false);
+  const [logoVisible, setLogoVisible] = useState(true);
+  const blurTimer = useRef<ReturnType<typeof setTimeout>>();
   const [, setLocation] = useLocation();
   const { signIn, signUp, signInWithApple } = useAuth();
   const { toast } = useToast();
@@ -101,7 +104,18 @@ export default function AuthPage() {
     setShowSignInPassword(false);
     setShowSignUpPassword(false);
     setShowSignUpConfirmPassword(false);
+    setLogoVisible(true);
   }, [mode]);
+
+  const onFormFocus = () => {
+    clearTimeout(blurTimer.current);
+    setLogoVisible(false);
+  };
+
+  const onFormBlur = () => {
+    // Delay so focus moving between inputs doesn't flash the logo in/out
+    blurTimer.current = setTimeout(() => setLogoVisible(true), 120);
+  };
 
   /* WKWebView can leave a non-zero scroll offset after keyboard focus; content then sits under the island. */
   useLayoutEffect(() => {
@@ -164,21 +178,25 @@ export default function AuthPage() {
         the keyboard; extra bottom padding is safe-area + small margin only (not 40vh).
       */}
       <div className="w-full">
-        {/* Logo */}
-        <motion.div
-          initial={{ opacity: 0, y: -6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="text-center mb-8"
-        >
-          <div className="flex items-center justify-center mb-3">
-            <div className="w-12 h-12 bg-skyblue rounded-2xl flex items-center justify-center shadow-lg">
-              <Zap size={22} className="text-white" fill="white" />
-            </div>
-          </div>
-          <h1 className="text-4xl font-bold text-foreground tracking-tight">Vista</h1>
-          <p className="text-muted-foreground mt-1.5 text-base">Your personal AI running coach</p>
-        </motion.div>
+        {/* Logo — hidden when keyboard is up to prevent it scrolling off screen */}
+        <AnimatePresence>
+          {logoVisible && (
+            <motion.div
+              key="logo"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+              transition={{ duration: 0.22 }}
+              className="text-center mb-8 overflow-hidden"
+            >
+              <div className="flex items-center justify-center mb-3">
+                <BrandMark size={64} />
+              </div>
+              <h1 className="text-4xl font-bold text-foreground tracking-tight">Vista</h1>
+              <p className="text-muted-foreground mt-1.5 text-base">Your AI coach for swim, bike & run</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Tab Toggle */}
         <div className="w-full bg-surface-raised rounded-2xl p-1 flex mb-6 shadow-sm">
@@ -201,6 +219,7 @@ export default function AuthPage() {
         </div>
 
         {/* Forms */}
+        <div onFocusCapture={onFormFocus} onBlurCapture={onFormBlur}>
         <AnimatePresence mode="wait">
           {mode === "signin" ? (
             <motion.div
@@ -337,6 +356,7 @@ export default function AuthPage() {
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
 
         {/* Divider */}
         <div className="flex items-center gap-3 w-full mt-5">
@@ -349,13 +369,13 @@ export default function AuthPage() {
         <button
           onClick={handleAppleSignIn}
           disabled={appleLoading}
-          className="w-full mt-3 bg-black text-white py-4 rounded-2xl font-semibold text-base flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-60 shadow-lg"
+          className="w-full mt-3 bg-white text-black py-4 rounded-2xl font-semibold text-base flex items-center justify-center gap-3 active:scale-95 transition-transform disabled:opacity-60"
         >
           {appleLoading ? (
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />
           ) : (
             <>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="black" xmlns="http://www.w3.org/2000/svg">
                 <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.7 9.05 7.4c1.37.07 2.32.74 3.15.8 1.2-.23 2.35-.91 3.63-.84 1.54.09 2.7.68 3.46 1.83-3.17 1.98-2.42 6.17.76 7.44-.56 1.47-1.3 2.9-3 3.65zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
               </svg>
               Sign in with Apple
@@ -364,7 +384,11 @@ export default function AuthPage() {
         </button>
 
         <p className="text-center text-xs text-muted-foreground mt-4 px-4">
-          By continuing, you agree to our Terms of Service and Privacy Policy.
+          By continuing, you agree to our{" "}
+          <a href="/privacy" className="underline">
+            Privacy Policy
+          </a>
+          . Vista provides training guidance, not medical advice.
         </p>
       </div>
     </div>
