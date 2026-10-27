@@ -60,6 +60,7 @@ export default function ProfilePage() {
   const { data: plan } = useQuery<{ id: string; title: string; startDate: string; endDate: string } | null>({ queryKey: ["/api/plan"] });
   const { data: health } = useQuery<HealthLog[]>({ queryKey: ["/api/health-logs"] });
   const { data: memories } = useQuery<CoachMemory[]>({ queryKey: ["/api/coach/memory"] });
+  const { data: usage } = useQuery<{ monthCostUsd: number; coach: { calls: number }; analysis: { calls: number } }>({ queryKey: ["/api/usage"] });
 
   const forgetNote = useMutation({
     mutationFn: (id: string) => apiJson("DELETE", `/api/coach/memory/${id}`),
@@ -329,6 +330,14 @@ export default function ProfilePage() {
 
       <SectionTitle>About</SectionTitle>
       <Card className="divide-y divide-hairline">
+        {usage && (
+          <div className="flex items-center gap-3 px-4 py-3.5">
+            <span className="flex-1 text-[15px] text-ink-1">AI usage this month</span>
+            <span className="num text-[14px] text-ink-2">
+              ${usage.monthCostUsd.toFixed(2)} · {usage.coach.calls + usage.analysis.calls} calls
+            </span>
+          </div>
+        )}
         <Row icon={<Shield size={17} />} label="Privacy policy" onClick={() => navigate("/privacy")} />
         <Row icon={<LogOut size={17} />} label="Sign out" onClick={() => void signOut()} />
         <Row icon={<Trash2 size={17} />} label="Delete account" danger onClick={() => setDeleteOpen(true)} />

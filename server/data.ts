@@ -17,6 +17,7 @@ import {
   chatMessages,
   coachMemory,
   dailyWellness,
+  aiUsage,
   type CoachMemoryCategory,
   type Run,
   type PlanWorkout,
@@ -374,6 +375,7 @@ export async function deleteAllUserData(userId: string): Promise<void> {
   await db.delete(coachMessages).where(eq(coachMessages.userId, userId));
   await db.delete(coachThreads).where(eq(coachThreads.userId, userId));
   await db.delete(coachMemory).where(eq(coachMemory.userId, userId));
+  await db.delete(aiUsage).where(eq(aiUsage.userId, userId));
   await db.delete(dailyWellness).where(eq(dailyWellness.userId, userId));
   await db.delete(chatMessages).where(eq(chatMessages.userId, userId));
   await db.delete(athleteThresholds).where(eq(athleteThresholds.userId, userId));

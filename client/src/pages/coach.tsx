@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowUp, Loader2, SquarePen, Sparkles, CalendarRange, BatteryLow, Gauge, Flag, Activity } from "lucide-react";
+import { ArrowUp, Loader2, SquarePen, Sparkles, CalendarRange, BatteryLow, Gauge, Flag, Activity, History } from "lucide-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useProfile } from "@/lib/vista";
 import { IOSFeedbackManager } from "@/lib/ios-utils";
-import { useCoachStore, loadCoachHistory, sendCoachMessage, startNewCoachThread, type CoachMessage } from "@/lib/coach-store";
+import { useCoachStore, loadCoachHistory, sendCoachMessage, startNewCoachThread, openCoachThread, type CoachMessage } from "@/lib/coach-store";
+import { Sheet } from "@/components/kit";
+import { fmtDate, timeAgo } from "@/lib/vista";
 import type { Dashboard } from "@/lib/types";
 
 function starterPrompts(hasPlan: boolean, race: string | null) {
@@ -25,7 +27,8 @@ export default function CoachPage() {
   const qc = useQueryClient();
   const { data: profile } = useProfile();
   const { data: dash } = useQuery<Dashboard>({ queryKey: ["/api/dashboard"] });
-  const { messages, busy, loaded } = useCoachStore();
+  const { messages, busy, loaded, threadId } = useCoachStore();
+  const [historyOpen, setHistoryOpen] = useState(false);
   const loading = !loaded;
   const [input, setInput] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
@@ -88,11 +91,16 @@ export default function CoachPage() {
             <div className="text-[11px] text-ink-3">Knows your training, zones & plan</div>
           </div>
         </div>
-        {messages.length > 0 && (
-          <button type="button" onClick={() => void newChat()} className="press rounded-full bg-white/[0.08] p-2 text-ink-2" aria-label="New conversation">
-            <SquarePen size={17} />
+        <div className="flex gap-1.5">
+          <button type="button" onClick={() => setHistoryOpen(true)} disabled={busy} className="press rounded-full bg-white/[0.08] p-2 text-ink-2 disabled:opacity-40" aria-label="Past conversations">
+            <History size={17} />
           </button>
-        )}
+          {messages.length > 0 && (
+            <button type="button" onClick={() => void newChat()} disabled={busy} className="press rounded-full bg-white/[0.08] p-2 text-ink-2 disabled:opacity-40" aria-label="New conversation">
+              <SquarePen size={17} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4" style={{ WebkitOverflowScrolling: "touch" }}>
@@ -127,6 +135,16 @@ export default function CoachPage() {
         <div ref={endRef} className="h-2" />
       </div>
 
+      <HistorySheet
+        open={historyOpen}
+        currentId={threadId}
+        onClose={() => setHistoryOpen(false)}
+        onPick={(id) => {
+          setHistoryOpen(false);
+          void openCoachThread(id).then(() => setTimeout(() => scrollDown(false), 50));
+        }}
+      />
+
       <div className="shrink-0 px-3 pb-[calc(84px+env(safe-area-inset-bottom))] pt-2">
         <div className="flex items-end gap-2 rounded-[22px] border border-hairline bg-[#111113] py-1.5 pl-4 pr-1.5">
           <textarea
@@ -156,6 +174,43 @@ export default function CoachPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+interface ThreadRow {
+  id: string;
+  title: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function HistorySheet({ open, currentId, onClose, onPick }: { open: boolean; currentId: string | null; onClose: () => void; onPick: (id: string) => void }) {
+  const { data, isLoading } = useQuery<ThreadRow[]>({ queryKey: ["/api/coach/threads"], enabled: open, staleTime: 0 });
+  // Threads get a title on their first message; untitled ones are empty "new chat" shells.
+  const threads = data?.filter((t) => t.title);
+  return (
+    <Sheet open={open} onClose={onClose} title="Past conversations">
+      {isLoading ? (
+        <div className="flex h-24 items-center justify-center">
+          <Loader2 className="animate-spin text-ink-3" />
+        </div>
+      ) : !threads?.length ? (
+        <p className="py-6 text-center text-[14px] text-ink-3">No conversations yet.</p>
+      ) : (
+        <div className="-mx-1 max-h-[60vh] divide-y divide-hairline overflow-y-auto">
+          {threads.map((t) => (
+            <button key={t.id} type="button" onClick={() => onPick(t.id)} className="press flex w-full items-center gap-3 px-1 py-3 text-left">
+              <div className="min-w-0 flex-1">
+                <div className={`truncate text-[15px] ${t.id === currentId ? "font-semibold text-primary" : "text-ink-1"}`}>{t.title || "New conversation"}</div>
+                <div className="text-[12px] text-ink-3">
+                  {fmtDate(t.createdAt.slice(0, 10))} · active {timeAgo(t.updatedAt)}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </Sheet>
   );
 }
 

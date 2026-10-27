@@ -4,7 +4,7 @@ services:
   - type: web
     name: vista-api
     runtime: docker
-    plan: starter
+    plan: free # Free: sleeps after 15 min idle — see README "Hosting on the free plan"
     healthCheckPath: /api/health
     envVars:
       - key: APP_URL

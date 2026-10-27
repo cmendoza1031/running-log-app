@@ -42,6 +42,7 @@ import {
   upsertWellness,
 } from "./data";
 import { getWellness } from "./analytics/wellness";
+import { usageSummary } from "./analytics/ai-usage";
 import { getFitness, weeklyVolume, weekStart, intensityDistribution, activityLoad, recomputeLoads } from "./analytics/load";
 import { applyThresholdInput, thresholdInputSchema, ThresholdInputError } from "./analytics/threshold-input";
 import { runThresholdDetection } from "./analytics/thresholds";
@@ -583,6 +584,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!(await archiveMemory(userId, req.params.id))) return res.status(404).json({ message: "Note not found" });
       res.json({ success: true });
     }),
+  );
+
+  app.get(
+    "/api/usage",
+    ...auth,
+    route(async (_req, res, userId) => res.json(await usageSummary(userId))),
   );
 
   // ─── Wellness (Apple Health) ────────────────────────────────────────────────

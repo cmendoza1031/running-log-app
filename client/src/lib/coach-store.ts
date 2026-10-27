@@ -57,6 +57,13 @@ export async function loadCoachHistory(): Promise<void> {
   }
 }
 
+/** Open a past conversation. */
+export async function openCoachThread(threadId: string): Promise<void> {
+  if (state.busy || threadId === state.threadId) return;
+  const h = await apiJson<HistoryResponse>("GET", `/api/coach/history?threadId=${encodeURIComponent(threadId)}`);
+  setState({ threadId: h.threadId, messages: h.messages.map((m) => ({ id: m.id, role: m.role, content: m.content })), loaded: true });
+}
+
 export async function startNewCoachThread(): Promise<void> {
   if (state.busy) return;
   const t = await apiJson<{ id: string }>("POST", "/api/coach/threads");

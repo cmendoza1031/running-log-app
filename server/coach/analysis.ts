@@ -26,6 +26,7 @@ import { storage } from "../storage";
 import { getActivity, getActivitiesBetween, getPlanWorkout, getThresholds, patchActivity, prefsFromProfile, todayInTz, type AthletePrefs } from "../data";
 import { getFitness } from "../analytics/load";
 import { getWellness, wellnessText } from "../analytics/wellness";
+import { logAiUsage } from "../analytics/ai-usage";
 
 export const ANALYSIS_MODEL = process.env.ANALYSIS_MODEL || "claude-haiku-5-5";
 
@@ -178,6 +179,7 @@ export async function analyzeActivity(userId: string, activityId: string): Promi
       messages: [{ role: "user", content: prompt }],
       output_config: { format: zodOutputFormat(AnalysisSchema) },
     });
+    void logAiUsage(userId, "analysis", res.model, res.usage);
     const parsed = res.parsed_output;
     if (!parsed) return null;
     // Guardrail: plan changes need evidence beyond a single model judgment.

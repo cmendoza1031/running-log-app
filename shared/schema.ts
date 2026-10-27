@@ -311,6 +311,20 @@ export const coachMemory = pgTable("coach_memory", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// ─── AI usage (cost tracking per Claude API response) ─────────────────────────
+export const aiUsage = pgTable("ai_usage", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull(),
+  kind: text("kind").$type<"coach" | "analysis">().notNull(),
+  model: text("model").notNull(),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
+  cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
+  costUsd: doublePrecision("cost_usd").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // ─── Daily wellness (Apple Health: HRV, resting HR, sleep) ────────────────────
 export const dailyWellness = pgTable(
   "daily_wellness",

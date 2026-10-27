@@ -14,6 +14,7 @@ import type { AuthenticatedRequest } from "../auth/middleware";
 import { COACH_SYSTEM_PROMPT } from "./system-prompt";
 import { TOOL_DEFINITIONS, executeTool, toolStatus } from "./tools";
 import { buildTurnContext } from "./context";
+import { logAiUsage } from "../analytics/ai-usage";
 import {
   appendThreadMessage,
   createThread,
@@ -129,6 +130,8 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
         send({ type: "iteration_reset" });
         continue;
       }
+
+      void logAiUsage(userId, "coach", final.model, final.usage);
 
       const toolUses = final.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use");
       const iterText = textOf(final.content);

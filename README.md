@@ -49,3 +49,24 @@ The iOS app needs a public HTTPS API (Strava webhooks need it too). `render.yaml
 ## Database migrations
 
 `supabase/migrations/*.sql` are additive and idempotent. Apply with `supabase db push` or paste into the SQL editor.
+
+## Hosting on the free plan (current setup)
+
+The API runs on Render's **free** instance (`plan: free` in `render.yaml`). Render rules that matter ([render.com/docs/free](https://render.com/docs/free)):
+
+- **Spins down after 15 min with no inbound HTTP traffic.** Any request wakes it in about 1 minute; browsers see Render's loading page meanwhile. Opening the web app is enough — no need to touch the Render dashboard.
+- While asleep, nothing runs: Strava webhooks fail (the server can't answer in time), the background sync poller is stopped, and in-flight workout notes can be cut off. The app syncs Strava each time it opens, so workouts still arrive — just later.
+- **750 free instance hours per workspace per month.** One always-on service uses ~744 h, so it fits — but only one. A second free service on 24/7 would exhaust the hours and Render suspends *all* free services until the next month.
+- Render may restart a free instance at any time. No local disk is kept (fine: all data is in Supabase).
+
+**Keep-awake monitor (external — not in this repo):** an UptimeRobot (or cron-job.org) HTTP monitor calls `GET https://vista-api-wy0l.onrender.com/api/health` every 5–14 min so the service never sleeps. A self-ping from inside the app can't work (a sleeping server can't wake itself), and a GitHub Actions cron would burn Actions minutes once the repo is private.
+→ **When moving to a paid plan ($7 Starter), delete that monitor and set `plan: starter` here.**
+
+## AI cost tracking
+
+Every Claude response (coach turns and workout notes) writes a row to `ai_usage` with tokens and computed USD cost (`server/analytics/ai-usage.ts`; update `PRICES` there if Anthropic changes pricing). Profile → About shows the signed-in user's month total. All users, in the Supabase SQL editor:
+
+```sql
+select date_trunc('day', created_at) as day, kind, model, count(*) as calls, round(sum(cost_usd)::numeric, 4) as usd
+from ai_usage group by 1, 2, 3 order by 1 desc;
+```
