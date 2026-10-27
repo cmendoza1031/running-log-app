@@ -39,10 +39,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         paintVistaChromeBackground()
     }
 
-    /// Native layers under WKWebView (safe areas, bounce) must match `#0a0a0f` — especially if
+    /// Native layers under WKWebView (safe areas, bounce) must match the app background (pure black) — especially if
     /// an old `capacitor.config.json` ever pointed `ios.backgroundColor` at a light hex.
     private func paintVistaChromeBackground() {
-        let vistaBg = UIColor(red: 10 / 255, green: 10 / 255, blue: 15 / 255, alpha: 1)
+        let vistaBg = UIColor.black
         window?.backgroundColor = vistaBg
         if #available(iOS 13.0, *) {
             window?.overrideUserInterfaceStyle = .dark

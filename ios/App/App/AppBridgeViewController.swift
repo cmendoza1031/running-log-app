@@ -5,7 +5,14 @@ import Capacitor
 /// margin/safe-area gaps). Capacitor reads `ios.backgroundColor` from config, but we reinforce here.
 final class AppBridgeViewController: CAPBridgeViewController {
 
-    private static let vistaBackground = UIColor(red: 10 / 255, green: 10 / 255, blue: 15 / 255, alpha: 1)
+    private static let vistaBackground = UIColor.black
+
+    override func webViewConfiguration(for instanceConfiguration: InstanceConfiguration) -> WKWebViewConfiguration {
+        let config = super.webViewConfiguration(for: instanceConfiguration)
+        // Allow window.open() after awaits (OAuth flow calls it post-fetch, losing the user-gesture token).
+        config.preferences.javaScriptCanOpenWindowsAutomatically = true
+        return config
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -16,6 +23,20 @@ final class AppBridgeViewController: CAPBridgeViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         applyVistaChrome()
+        // If StatusBar’s resizeWebView no-op’d (nil keyWindow), WKWebView can stay 0×0 until next layout.
+        DispatchQueue.main.async { [weak self] in
+            self?.repairWebViewFrameIfCollapsed()
+        }
+    }
+
+    private func repairWebViewFrameIfCollapsed() {
+        guard let wv = webView else { return }
+        let target = view.window?.bounds ?? view.bounds
+        guard target.width > 1, target.height > 1 else { return }
+        if wv.frame.width < 1 || wv.frame.height < 1 {
+            wv.frame = target
+            applyVistaChrome()
+        }
     }
 
     override var preferredStatusBarStyle: UIStatusBarStyle {
