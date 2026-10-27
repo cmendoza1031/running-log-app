@@ -5,7 +5,7 @@ import { ArrowLeft, Check, Loader2, Zap, Sparkles } from "lucide-react";
 import type { Profile, TrainingDay } from "@shared/schema";
 import { RACES, METERS_PER_MILE, type RaceType } from "@shared/physiology";
 import { apiJson } from "@/lib/queryClient";
-import { SportBadge, PrimaryButton, Segmented } from "@/components/kit";
+import { SportBadge, PrimaryButton, Segmented, ClockInput, isValidClock } from "@/components/kit";
 import { WeeklySchedulePicker } from "@/components/weekly-schedule-picker";
 import { connectStravaFlow, type StravaConnectPhase } from "@/lib/strava-oauth";
 import { formatThreshold } from "@/components/training";
@@ -429,6 +429,14 @@ function StepThresholds({ s, beforeSave }: { s: State; beforeSave: () => Promise
   const save = async () => {
     const body: Record<string, unknown> = {};
     if (ftp) body.ftp = Number(ftp);
+    if (raceTime && !isValidClock(raceTime)) {
+      toast({ title: "Check the race time", description: "Use mm:ss or h:mm:ss.", variant: "destructive" });
+      return;
+    }
+    if (css && !isValidClock(css)) {
+      toast({ title: "Check the swim pace", description: "Use m:ss, e.g. 1:50.", variant: "destructive" });
+      return;
+    }
     if (raceTime) body.recentRace = { distanceMeters: Number(raceDist), time: raceTime };
     if (css) body.swimCss = `${css}/${s.pool === "yards" ? "100yd" : "100m"}`;
     if (maxHr) body.maxHr = Number(maxHr);
@@ -479,14 +487,14 @@ function StepThresholds({ s, beforeSave }: { s: State; beforeSave: () => Promise
             </div>
             <Known metric="run_threshold_pace" />
             <div className="flex gap-2">
-              <select className={`${input} w-28`} value={raceDist} onChange={(e) => setRaceDist(e.target.value)}>
+              <select className={`${input} w-28`} value={raceDist} onChange={(e) => { setRaceDist(e.target.value); setRaceTime(""); }}>
                 <option value="5000">5K</option>
                 <option value="10000">10K</option>
                 <option value={String(METERS_PER_MILE)}>Mile</option>
                 <option value="21097.5">Half</option>
                 <option value="42195">Marathon</option>
               </select>
-              <input className={input} placeholder="Time, e.g. 24:30" value={raceTime} onChange={(e) => setRaceTime(e.target.value)} />
+              <ClockInput className={input} withHours={Number(raceDist) > 10000} placeholder={Number(raceDist) > 10000 ? "h:mm:ss, e.g. 1:45:30" : "mm:ss, e.g. 24:30"} value={raceTime} onChange={setRaceTime} />
             </div>
           </div>
         )}
@@ -498,7 +506,7 @@ function StepThresholds({ s, beforeSave }: { s: State; beforeSave: () => Promise
               <span className="text-[12px] text-ink-3">per 100{s.pool === "yards" ? "yd" : "m"}</span>
             </div>
             <Known metric="swim_css" />
-            <input className={input} placeholder="e.g. 1:50 (optional)" value={css} onChange={(e) => setCss(e.target.value)} />
+            <ClockInput className={input} placeholder="m:ss, e.g. 1:50 (optional)" value={css} onChange={setCss} />
           </div>
         )}
         <div>

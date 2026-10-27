@@ -7,7 +7,7 @@ import { RACES, THRESHOLD_LABELS, type RaceType, type ThresholdMetric } from "@s
 import { apiJson } from "@/lib/queryClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePrefs, useProfile, useThresholds, timeAgo, fmtDate, localToday } from "@/lib/vista";
-import { PageHeader, Card, SectionTitle, Segmented, Sheet, PrimaryButton, Pill } from "@/components/kit";
+import { PageHeader, Card, SectionTitle, Segmented, Sheet, PrimaryButton, Pill, ClockInput, isValidClock } from "@/components/kit";
 import { WeeklySchedulePicker } from "@/components/weekly-schedule-picker";
 import { formatThreshold } from "@/components/training";
 import { connectStravaFlow, openGarminStravaHelpArticle, type StravaConnectPhase } from "@/lib/strava-oauth";
@@ -548,15 +548,24 @@ function ThresholdEditSheet({ metric, onClose }: { metric: ThresholdMetric | nul
   };
   return (
     <Sheet open={!!metric} onClose={onClose} title={THRESHOLD_LABELS[metric]}>
-      <input
-        autoFocus
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder={spec.hint(prefs)}
-        inputMode={spec.numeric ? "decimal" : "text"}
-        className="mb-4 w-full rounded-xl bg-white/[0.08] px-4 py-3 text-ink-1 outline-none placeholder:text-ink-3"
-      />
-      <PrimaryButton className="w-full" onClick={submit} disabled={!value.trim() || save.isPending}>
+      {spec.suffix ? (
+        <ClockInput
+          value={value}
+          onChange={setValue}
+          placeholder={spec.hint(prefs)}
+          className="mb-4 w-full rounded-xl border border-transparent bg-white/[0.08] px-4 py-3 text-ink-1 outline-none placeholder:text-ink-3"
+        />
+      ) : (
+        <input
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={spec.hint(prefs)}
+          inputMode={spec.numeric ? "decimal" : "text"}
+          className="mb-4 w-full rounded-xl bg-white/[0.08] px-4 py-3 text-ink-1 outline-none placeholder:text-ink-3"
+        />
+      )}
+      <PrimaryButton className="w-full" onClick={submit} disabled={!value.trim() || (!!spec.suffix && !isValidClock(value)) || save.isPending}>
         {save.isPending ? <Loader2 size={16} className="animate-spin" /> : "Save"}
       </PrimaryButton>
       <p className="mt-3 text-[12px] leading-snug text-ink-3">Not sure? Leave it — Vista estimates thresholds from your workouts and asks before changing anything you set.</p>

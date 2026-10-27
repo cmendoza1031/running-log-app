@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { resetCoachStore } from "@/lib/coach-store";
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase, updateCachedToken } from "@/lib/supabase";
 import { apiUrl } from "@/lib/queryClient";
@@ -66,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    resetCoachStore();
   };
 
   const signInWithMagicLink = async (email: string) => {

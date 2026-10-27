@@ -3,25 +3,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ArrowUp, Loader2, SquarePen, Sparkles, CalendarRange, BatteryLow, Gauge, Flag, Activity } from "lucide-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
-import { apiUrl, authHeaders, apiJson } from "@/lib/queryClient";
 import { useProfile } from "@/lib/vista";
 import { IOSFeedbackManager } from "@/lib/ios-utils";
+import { useCoachStore, loadCoachHistory, sendCoachMessage, startNewCoachThread, type CoachMessage } from "@/lib/coach-store";
 import type { Dashboard } from "@/lib/types";
-
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  streaming?: boolean;
-  status?: string | null;
-  error?: boolean;
-}
-
-interface HistoryResponse {
-  threadId: string | null;
-  title?: string | null;
-  messages: { id: string; role: "user" | "assistant"; content: string }[];
-}
 
 function starterPrompts(hasPlan: boolean, race: string | null) {
   const list = [
@@ -40,11 +25,9 @@ export default function CoachPage() {
   const qc = useQueryClient();
   const { data: profile } = useProfile();
   const { data: dash } = useQuery<Dashboard>({ queryKey: ["/api/dashboard"] });
-  const [threadId, setThreadId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { messages, busy, loaded } = useCoachStore();
+  const loading = !loaded;
   const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const autoPromptHandled = useRef(false);
@@ -52,25 +35,8 @@ export default function CoachPage() {
   const scrollDown = useCallback((smooth = true) => endRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "end" }), []);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const h = await apiJson<HistoryResponse>("GET", "/api/coach/history");
-        if (cancelled) return;
-        setThreadId(h.threadId);
-        setMessages(h.messages.map((m) => ({ id: m.id, role: m.role, content: m.content })));
-      } catch {
-        /* empty history */
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-          setTimeout(() => scrollDown(false), 50);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    void loadCoachHistory();
+    setTimeout(() => scrollDown(false), 50);
   }, [scrollDown]);
 
   useEffect(() => {
@@ -78,90 +44,12 @@ export default function CoachPage() {
   }, [messages, scrollDown]);
 
   const send = useCallback(
-    async (text: string) => {
-      const msg = text.trim();
-      if (!msg || busy) return;
-      void IOSFeedbackManager.lightImpact();
-      const aid = `a-${Date.now()}`;
-      setMessages((prev) => [...prev, { id: `u-${Date.now()}`, role: "user", content: msg }, { id: aid, role: "assistant", content: "", streaming: true, status: "Thinking…" }]);
+    (text: string) => {
+      if (!text.trim() || busy) return;
       setInput("");
-      setBusy(true);
-      let committed = "";
-      let draft = "";
-      const update = (patch: Partial<Message>) => setMessages((prev) => prev.map((m) => (m.id === aid ? { ...m, ...patch } : m)));
-      const render = () => update({ content: (committed + (committed && draft ? "\n\n" : "") + draft).trim() });
-      try {
-        const res = await fetch(apiUrl("/api/coach/chat"), {
-          method: "POST",
-          headers: await authHeaders(true),
-          body: JSON.stringify({ message: msg, threadId }),
-        });
-        if (!res.ok || !res.body) {
-          const body = await res.json().catch(() => null);
-          throw new Error(body?.message ?? "The coach is unavailable right now.");
-        }
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buf = "";
-        let changed = false;
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const lines = buf.split("\n");
-          buf = lines.pop() ?? "";
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-            let ev: { type: string; content?: string; status?: string; threadId?: string; changedData?: boolean };
-            try {
-              ev = JSON.parse(line.slice(6));
-            } catch {
-              continue;
-            }
-            switch (ev.type) {
-              case "thread":
-                if (ev.threadId) setThreadId(ev.threadId);
-                break;
-              case "token":
-                draft += ev.content ?? "";
-                update({ status: null });
-                render();
-                break;
-              case "iteration_done":
-                if (ev.content) committed = committed ? `${committed}\n\n${ev.content}` : ev.content;
-                draft = "";
-                render();
-                break;
-              case "iteration_reset":
-                draft = "";
-                render();
-                break;
-              case "progress":
-                if (ev.content) update({ status: ev.content.slice(0, 140) });
-                break;
-              case "tool_start":
-                update({ status: ev.status ?? "Working…" });
-                break;
-              case "done":
-                changed = !!ev.changedData;
-                break;
-              case "error":
-                throw new Error(ev.content ?? "Something went wrong");
-            }
-          }
-        }
-        update({ streaming: false, status: null });
-        if (!committed && !draft) update({ content: "Done." });
-        if (changed) void qc.invalidateQueries();
-        void IOSFeedbackManager.successNotification();
-      } catch (err) {
-        update({ streaming: false, status: null, error: true, content: (committed + draft).trim() || (err as Error).message });
-        void IOSFeedbackManager.errorNotification();
-      } finally {
-        setBusy(false);
-      }
+      void sendCoachMessage(text, () => void qc.invalidateQueries());
     },
-    [busy, qc, threadId],
+    [busy, qc],
   );
 
   // Deep links: /coach?prompt=plan or ?prompt=<text>
@@ -172,7 +60,7 @@ export default function CoachPage() {
     autoPromptHandled.current = true;
     window.history.replaceState({}, "", "/coach");
     if (p === "plan") {
-      void send(profile?.targetRace ? `Build my training plan for the ${profile.targetRace}` : "Build me a training plan");
+      send(profile?.targetRace ? `Build my training plan for the ${profile.targetRace}` : "Build me a training plan");
     } else {
       setInput(p);
       setTimeout(() => inputRef.current?.focus(), 100);
@@ -182,9 +70,7 @@ export default function CoachPage() {
   const newChat = async () => {
     if (busy) return;
     void IOSFeedbackManager.mediumImpact();
-    const t = await apiJson<{ id: string }>("POST", "/api/coach/threads");
-    setThreadId(t.id);
-    setMessages([]);
+    await startNewCoachThread();
   };
 
   const empty = !loading && messages.length === 0;
@@ -224,7 +110,7 @@ export default function CoachPage() {
             </p>
             <div className="mt-5 space-y-2">
               {starterPrompts(!!dash?.plan, profile?.targetRace ?? dash?.race?.label ?? null).map(({ icon: Icon, text }) => (
-                <button key={text} type="button" onClick={() => void send(text)} className="press card flex w-full items-center gap-3 px-4 py-3.5 text-left">
+                <button key={text} type="button" onClick={() => send(text)} className="press card flex w-full items-center gap-3 px-4 py-3.5 text-left">
                   <Icon size={17} className="shrink-0 text-primary" />
                   <span className="text-[14px] font-medium text-ink-1">{text}</span>
                 </button>
@@ -250,7 +136,7 @@ export default function CoachPage() {
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                void send(input);
+                send(input);
               }
             }}
             rows={1}
@@ -260,7 +146,7 @@ export default function CoachPage() {
           />
           <button
             type="button"
-            onClick={() => void send(input)}
+            onClick={() => send(input)}
             disabled={!input.trim() || busy}
             className="press flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-white disabled:bg-white/[0.12] disabled:text-ink-3"
             aria-label="Send"
@@ -273,7 +159,7 @@ export default function CoachPage() {
   );
 }
 
-function Bubble({ m }: { m: Message }) {
+function Bubble({ m }: { m: CoachMessage }) {
   if (m.role === "user") {
     return (
       <div className="flex justify-end">

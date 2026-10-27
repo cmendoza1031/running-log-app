@@ -243,3 +243,45 @@ export function BrandMark({ size = 56 }: { size?: number }) {
     </svg>
   );
 }
+
+/** Digits → clock text, filled from the right like a stopwatch: "2430" → "24:30", "14530" → "1:45:30". */
+export function formatClockDigits(raw: string, maxDigits: number): string {
+  const d = raw.replace(/\D/g, "").replace(/^0+(?=\d)/, "").slice(0, maxDigits);
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return `${d.slice(0, -2)}:${d.slice(-2)}`;
+  return `${d.slice(0, -4)}:${d.slice(-4, -2)}:${d.slice(-2)}`;
+}
+
+/** True when every segment after the first is 00-59. */
+export function isValidClock(text: string): boolean {
+  const parts = text.split(":");
+  return parts.length >= 2 && parts.slice(1).every((p) => p.length === 2 && Number(p) < 60);
+}
+
+/** Numeric time input that inserts the colons itself (mm:ss, or h:mm:ss when `withHours`). */
+export function ClockInput({
+  value,
+  onChange,
+  withHours = false,
+  placeholder,
+  className = "",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  withHours?: boolean;
+  placeholder?: string;
+  className?: string;
+}) {
+  const invalid = value.length > 0 && value.includes(":") && !isValidClock(value);
+  return (
+    <input
+      inputMode="numeric"
+      autoComplete="off"
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => onChange(formatClockDigits(e.target.value, withHours ? 6 : 4))}
+      className={`${className} num ${invalid ? "!border-bad" : ""}`}
+      aria-invalid={invalid}
+    />
+  );
+}
