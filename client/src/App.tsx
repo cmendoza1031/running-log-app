@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+import { watchForNewVersion } from "@/lib/app-update";
+import { isCoachBusy } from "@/lib/coach-store";
 import { Switch, Route, Redirect } from "wouter";
 import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SplashScreen } from "@capacitor/splash-screen";
@@ -125,6 +127,7 @@ function AppContent() {
     void IOSAppManager.initialize();
     IOSPerformanceManager.preventZoom();
   }, []);
+  useEffect(() => watchForNewVersion(isCoachBusy), []);
   return <Router />;
 }
 

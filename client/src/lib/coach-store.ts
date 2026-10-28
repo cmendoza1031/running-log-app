@@ -39,6 +39,8 @@ function setState(patch: Partial<CoachState> | ((s: CoachState) => Partial<Coach
   listeners.forEach((l) => l());
 }
 
+export const isCoachBusy = () => state.busy;
+
 export function useCoachStore(): CoachState {
   return useSyncExternalStore(
     (l) => {
