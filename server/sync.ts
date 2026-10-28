@@ -14,10 +14,11 @@ import {
   StravaAuthError,
 } from "./integrations/strava";
 import { matchActivityToPlan, refreshPlannedMetrics } from "./planning/service";
+import { sessionGroup } from "./planning/session-group";
 import { runThresholdDetection } from "./analytics/thresholds";
 import { recomputeLoads } from "./analytics/load";
 import { analyzeActivity } from "./coach/analysis";
-import { todayInTz, getActivity } from "./data";
+import { todayInTz } from "./data";
 import { addDays } from "@shared/training-load";
 
 const running = new Map<string, Promise<SyncResult>>();
@@ -45,9 +46,14 @@ async function afterNewActivities(userId: string, tz: string | null, fresh: Run[
   }
   const today = todayInTz(tz);
   const toAnalyze = fresh.filter((r) => shouldAnalyze(r, today)).slice(0, 5);
+  // A new file that joins a multi-file session changes the picture for the files already noted
+  // (e.g. the warm-up's note said "main set missing"): rewrite their notes too.
+  const ids = new Set(toAnalyze.map((r) => r.id));
   for (const r of toAnalyze) {
-    const latest = await getActivity(userId, r.id);
-    if (latest && (await analyzeActivity(userId, latest.id))) result.analyzed++;
+    for (const g of await sessionGroup(userId, r)) if (g.analysis && ids.size < 8) ids.add(g.id);
+  }
+  for (const id of ids) {
+    if (await analyzeActivity(userId, id)) result.analyzed++;
   }
 }
 

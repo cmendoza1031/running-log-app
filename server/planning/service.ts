@@ -21,6 +21,7 @@ import { storage } from "../storage";
 import {
   getActivePlan,
   getActivitiesBetween,
+  getPlanWorkout,
   getPlanWorkoutsBetween,
   getThresholds,
   insertPlanWorkouts,
@@ -37,6 +38,7 @@ import { db } from "../storage";
 import { trainingPlans } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
 import { activityMovingSec } from "../analytics/load";
+import { sessionGroup, mainFile } from "./session-group";
 
 const LEGACY_TYPE: Record<string, Record<string, string>> = {
   run: { easy: "easy", recovery: "recovery", long: "long", quality: "threshold", brick: "brick", race: "race" },
@@ -186,21 +188,30 @@ export async function refreshPlannedMetrics(userId: string): Promise<number> {
 
 // ─── Matching activities to planned sessions ─────────────────────────────────
 
+/**
+ * Link an activity to the planned session it fulfils. A session saved as several files (warm-up,
+ * main set, cool-down) is matched as one: every file links to the planned workout, and the file with
+ * the most load becomes the workout's completed activity. Files arrive one at a time (webhooks), so a
+ * later file joins an earlier file's match and can take over as the main file.
+ */
 export async function matchActivityToPlan(userId: string, run: Run): Promise<PlanWorkout | null> {
   if (run.planWorkoutId) return null;
   const sport = toSport(run.sportType);
   if (!sport) return null;
-  const candidates = (await getPlanWorkoutsBetween(userId, run.date, run.date)).filter(
-    (w) => !w.isCompleted && w.status !== "skipped" && (w.sport ?? toSport(sportOfLegacy(w.workoutType))) === sport,
-  );
-  if (!candidates.length) return null;
-  const secs = activityMovingSec(run);
-  const best = candidates.sort(
-    (a, b) => Math.abs((a.plannedDurationSec ?? secs) - secs) - Math.abs((b.plannedDurationSec ?? secs) - secs),
-  )[0];
-  await patchPlanWorkout(userId, best.id, { isCompleted: true, completedRunId: run.id, status: "completed" });
-  await patchActivity(userId, run.id, { planWorkoutId: best.id });
-  return best;
+  const group = await sessionGroup(userId, run);
+  const linkedId = group.find((r) => r.planWorkoutId)?.planWorkoutId;
+  let target = linkedId ? await getPlanWorkout(userId, linkedId) : undefined;
+  if (!target) {
+    const candidates = (await getPlanWorkoutsBetween(userId, run.date, run.date)).filter(
+      (w) => !w.isCompleted && w.status !== "skipped" && (w.sport ?? toSport(sportOfLegacy(w.workoutType))) === sport,
+    );
+    if (!candidates.length) return null;
+    const secs = group.reduce((a, r) => a + activityMovingSec(r), 0);
+    target = candidates.sort((a, b) => Math.abs((a.plannedDurationSec ?? secs) - secs) - Math.abs((b.plannedDurationSec ?? secs) - secs))[0];
+  }
+  for (const r of group) if (!r.planWorkoutId) await patchActivity(userId, r.id, { planWorkoutId: target.id });
+  await patchPlanWorkout(userId, target.id, { isCompleted: true, completedRunId: mainFile(group).id, status: "completed" });
+  return target;
 }
 
 function sportOfLegacy(workoutType: string): string {

@@ -12,6 +12,7 @@ import {
   athleteThresholds,
   coachThreads,
   coachMessages,
+  coachMessagesArchive,
   healthLogs,
   fitnessIntegrations,
   chatMessages,
@@ -272,9 +273,22 @@ export async function deleteFuturePlannedWorkouts(userId: string, from: string):
 
 // ─── Coach threads ────────────────────────────────────────────────────────────
 
+/** After this long without messages, opening the coach starts a fresh conversation (keeps context small and cheap). */
+const THREAD_IDLE_HOURS = 6;
+
+/**
+ * The conversation the Coach tab opens: the latest one, unless it has messages and has been idle
+ * for THREAD_IDLE_HOURS — then a new one (the coach still knows the athlete via the card and notes).
+ */
 export async function getOrCreateLatestThread(userId: string) {
-  const [t] = await db.select().from(coachThreads).where(eq(coachThreads.userId, userId)).orderBy(desc(coachThreads.updatedAt)).limit(1);
-  if (t) return t;
+  const [t] = await db
+    .select({ thread: coachThreads, fresh: sql<boolean>`${coachThreads.updatedAt} > now() - make_interval(hours => ${THREAD_IDLE_HOURS})` })
+    .from(coachThreads)
+    .where(eq(coachThreads.userId, userId))
+    .orderBy(desc(coachThreads.updatedAt))
+    .limit(1);
+  // Untitled = no messages yet (the title is set from the first message).
+  if (t && (t.fresh || !t.thread.title)) return t.thread;
   const [created] = await db.insert(coachThreads).values({ userId }).returning();
   return created;
 }
@@ -303,7 +317,10 @@ export async function appendThreadMessage(row: typeof coachMessages.$inferInsert
   return m;
 }
 
-/** Delete a visible user message and everything after it in its thread (message edit). */
+/**
+ * Message edit: move a visible user message and everything after it to coach_messages_archive.
+ * coach_messages keeps only the live conversation, so readers never filter.
+ */
 export async function truncateThreadFrom(threadId: string, messageId: string): Promise<void> {
   const [m] = await db
     .select()
@@ -311,7 +328,11 @@ export async function truncateThreadFrom(threadId: string, messageId: string): P
     .where(and(eq(coachMessages.threadId, threadId), eq(coachMessages.id, messageId)))
     .limit(1);
   if (!m || m.role !== "user" || !m.visible) throw new Error("Message can't be edited");
-  await db.delete(coachMessages).where(and(eq(coachMessages.threadId, threadId), gte(coachMessages.createdAt, m.createdAt)));
+  await db.transaction(async (tx) => {
+    const tail = and(eq(coachMessages.threadId, threadId), gte(coachMessages.createdAt, m.createdAt));
+    const rows = await tx.delete(coachMessages).where(tail).returning();
+    if (rows.length) await tx.insert(coachMessagesArchive).values(rows.map((r) => ({ ...r, reason: "edited" })));
+  });
 }
 
 export async function renameThread(threadId: string, title: string) {
@@ -384,6 +405,7 @@ export async function getWellnessBetween(userId: string, from: string, to: strin
 
 export async function deleteAllUserData(userId: string): Promise<void> {
   await db.delete(coachMessages).where(eq(coachMessages.userId, userId));
+  await db.delete(coachMessagesArchive).where(eq(coachMessagesArchive.userId, userId));
   await db.delete(coachThreads).where(eq(coachThreads.userId, userId));
   await db.delete(coachMemory).where(eq(coachMemory.userId, userId));
   await db.delete(aiUsage).where(eq(aiUsage.userId, userId));

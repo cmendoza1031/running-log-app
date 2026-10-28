@@ -40,6 +40,10 @@ export default function CoachPage() {
   useEffect(() => {
     void loadCoachHistory();
     setTimeout(() => scrollDown(false), 50);
+    // The app may sit open on this tab for hours: re-check the idle rule when it comes back to the foreground.
+    const onVisible = () => document.visibilityState === "visible" && void loadCoachHistory();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [scrollDown]);
 
   useEffect(() => {

@@ -32,6 +32,9 @@ interface HistoryResponse {
 
 let state: CoachState = { threadId: null, messages: [], busy: false, loaded: false };
 let controller: AbortController | null = null;
+/** Matches the server's idle rule: after 6 h without chatting, the Coach tab opens a fresh conversation. */
+const IDLE_MS = 6 * 3600 * 1000;
+let lastActiveAt = 0;
 const listeners = new Set<() => void>();
 
 function setState(patch: Partial<CoachState> | ((s: CoachState) => Partial<CoachState>)) {
@@ -51,12 +54,16 @@ export function useCoachStore(): CoachState {
   );
 }
 
-/** Load the latest thread once per session; never while a reply is streaming. */
+/**
+ * Load the current conversation: once per session, and again after IDLE_MS without chatting (the server then
+ * returns a new conversation). Never while a reply is streaming.
+ */
 export async function loadCoachHistory(): Promise<void> {
-  if (state.loaded || state.busy) return;
+  if (state.busy || (state.loaded && Date.now() - lastActiveAt < IDLE_MS)) return;
   try {
     const h = await apiJson<HistoryResponse>("GET", "/api/coach/history");
     if (state.busy) return;
+    lastActiveAt = Date.now();
     setState({ threadId: h.threadId, messages: h.messages.map((m) => ({ id: m.id, role: m.role, content: m.content })), loaded: true });
   } catch {
     setState({ loaded: true });
@@ -79,6 +86,7 @@ export async function startNewCoachThread(): Promise<void> {
 /** Clear on sign-out so the next account doesn't see this chat. */
 export function resetCoachStore() {
   controller?.abort();
+  lastActiveAt = 0;
   state = { threadId: null, messages: [], busy: false, loaded: false };
   listeners.forEach((l) => l());
 }
@@ -189,6 +197,7 @@ export async function sendCoachMessage(text: string, onDataChanged: () => void, 
     }
   } finally {
     controller = null;
+    lastActiveAt = Date.now();
     setState({ busy: false });
   }
 }

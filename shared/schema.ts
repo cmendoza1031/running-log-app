@@ -297,6 +297,20 @@ export const coachMessages = pgTable("coach_messages", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+/** Messages replaced by an edit (moved here from coach_messages). Never sent to the model. */
+export const coachMessagesArchive = pgTable("coach_messages_archive", {
+  id: uuid("id").primaryKey(),
+  threadId: uuid("thread_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  role: text("role").notNull(),
+  content: jsonb("content").notNull(),
+  displayText: text("display_text"),
+  visible: boolean("visible").notNull(),
+  createdAt: timestamp("created_at").notNull(),
+  archivedAt: timestamp("archived_at").defaultNow().notNull(),
+  reason: text("reason").notNull().default("edited"),
+});
+
 // ─── Coach long-term memory (durable facts across conversations) ──────────────
 export const COACH_MEMORY_CATEGORIES = ["injury", "preference", "life", "goal", "race_history", "equipment", "other"] as const;
 export type CoachMemoryCategory = (typeof COACH_MEMORY_CATEGORIES)[number];

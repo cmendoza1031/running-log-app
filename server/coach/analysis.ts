@@ -27,6 +27,8 @@ import { getActivity, getActivitiesBetween, getPlanWorkout, getThresholds, patch
 import { getFitness } from "../analytics/load";
 import { getWellness, wellnessText } from "../analytics/wellness";
 import { logAiUsage } from "../analytics/ai-usage";
+import { sessionGroup, mainFile } from "../planning/session-group";
+import { activityLine } from "./context";
 
 export const ANALYSIS_MODEL = process.env.ANALYSIS_MODEL || "claude-haiku-5-5";
 
@@ -169,13 +171,23 @@ export async function analyzeActivity(userId: string, activityId: string): Promi
     } Planned duration ${formatDuration(planned.plannedDurationSec ?? 0)}, planned load ${Math.round(planned.plannedTss ?? 0)} TSS.`;
   }
 
-  const prompt = `${ctx.join("\n")}\n\n${plannedText}\n\nWhat the athlete did:\n${describeActivityForModel(run, th, prefs)}\n\nWrite the post-workout note.`;
+  // A session saved as several files: show all of them so the note judges the whole session.
+  const group = await sessionGroup(userId, run);
+  let groupText = "";
+  if (group.length > 1) {
+    const main = mainFile(group);
+    groupText = `\n\nThis session was saved as ${group.length} separate files (same sport, back to back). Judge the planned session using ALL of them; this note is for the file marked THIS FILE. If THIS FILE is a warm-up or cool-down segment, say so briefly and comment on the session as a whole — never call the session skipped or unplanned because the main set is in another file. Don't write the labels THIS FILE or MAIN SET FILE in the note; say "this warm-up", "the main set" etc.\n${group
+      .map((r) => `- ${r.startTime ? r.startTime.toISOString().slice(11, 16) + " UTC" : ""} ${r.id === run.id ? "[THIS FILE] " : ""}${r.id === main.id ? "[MAIN SET FILE] " : ""}${activityLine(r, prefs)}`)
+      .join("\n")}`;
+  }
+
+  const prompt = `${ctx.join("\n")}\n\n${plannedText}${groupText}\n\nWhat the athlete did (THIS FILE):\n${describeActivityForModel(run, th, prefs)}\n\nWrite the post-workout note.`;
 
   try {
     const startedAt = Date.now();
     const res = await anthropic().messages.parse({
       model: ANALYSIS_MODEL,
-      max_tokens: 1200,
+      max_tokens: 4000, // notes use ~1,000; a cut-off note fails JSON parsing
       system: SYSTEM,
       messages: [{ role: "user", content: prompt }],
       output_config: { format: zodOutputFormat(AnalysisSchema) },
