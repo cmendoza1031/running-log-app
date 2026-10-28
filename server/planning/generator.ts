@@ -7,7 +7,9 @@
  *     never more than ~10% week-over-week; recovery weeks at ~65%.
  *  3. Sport split: by race demands (e.g. Ironman ≈ 15/55/30 swim/bike/run), shifted toward the
  *     athlete's limiter.
- *  4. Scheduling: long sessions on long days, hard days separated, respects each day's time cap.
+ *  4. Scheduling: long ride on the long day, long run on the day next to it (the "big weekend")
+ *     unless the athlete stars a second long day; never two hard run (or bike) days in a row;
+ *     respects each day's time cap. Days the athlete didn't pick are rest days.
  */
 import type { TrainingDay } from "@shared/schema";
 import { RACES, type RaceType, type Sport, type PoolUnit } from "@shared/physiology";
@@ -245,7 +247,8 @@ interface DaySlot {
   cap: number; // minutes
   isLong: boolean;
   used: number;
-  hard: boolean;
+  /** Run/bike sports with a hard session (long or quality) on this day. Swim quality doesn't count. */
+  hard: Set<Sport>;
   sessions: PlannedSession[];
 }
 
@@ -279,45 +282,97 @@ function buildSlots(weekStart: string, schedule: TrainingDay[], fromDate: string
     if (date < fromDate) continue;
     let cap = d.maxMinutes;
     if (d.maxMinutes >= 180 && stretch) cap = Math.max(cap, 360);
-    slots.push({ dow, date, cap, isLong: d.isLongDay, used: 0, hard: false, sessions: [] });
+    slots.push({ dow, date, cap, isLong: d.isLongDay, used: 0, hard: new Set(), sessions: [] });
   }
   return slots.sort((a, b) => a.dow - b.dow);
 }
 
-function adjacentHard(slots: DaySlot[], s: DaySlot): boolean {
-  return slots.some((o) => o !== s && o.hard && Math.abs(o.dow - s.dow) === 1);
-}
-
-function place(slots: DaySlot[], spec: SessionSpec, slot: DaySlot, minutes: number, hard: boolean) {
+function place(spec: SessionSpec, slot: DaySlot, minutes: number, hard: boolean) {
   slot.sessions.push({ ...spec, date: slot.date, order: slot.sessions.length });
   slot.used += minutes;
-  if (hard) slot.hard = true;
+  if (hard && spec.sport !== "swim") slot.hard.add(spec.sport);
 }
 
-interface Scheduler {
-  (want: Want): DaySlot | null;
+/**
+ * Hard run/bike sports on each day of the week (0=Mon … 6=Sun). Last week's Saturday and Sunday
+ * sit at -2 and -1, so spacing rules hold across the week boundary.
+ */
+function hardByDow(slots: DaySlot[], prevWeekend: Set<Sport>[]): (dow: number) => Set<Sport> {
+  return (dow) => (dow < 0 ? prevWeekend[dow + 2] : slots.find((s) => s.dow === dow)?.hard) ?? new Set();
 }
 
-function makeChooser(slots: DaySlot[], longDays: DaySlot[]): Scheduler {
+/** `strained`: the only day left breaks a spacing rule (hard sport back to back, or three hard days in a row). */
+type Chooser = (want: Want) => { slot: DaySlot; strained: boolean } | null;
+
+/**
+ * Pick the day for one session. Rules, strongest first:
+ *  - a hard run is never the day before/after another hard run (same for bike) — 48 h between
+ *    hard sessions of one sport; only broken when no other day fits;
+ *  - no three hard days in a row (any sports); then avoid two hard sessions on one day and
+ *    hard days back to back;
+ *  - the session should fit the day's time cap; spread sessions over the week.
+ * Swim quality is exempt from spacing (low impact, short recovery). When the schedule leaves no
+ * day that keeps the rules, the caller turns a quality session into an easy one.
+ */
+function makeChooser(slots: DaySlot[], longDays: DaySlot[], prevWeekend: Set<Sport>[]): Chooser {
+  const hardOn = hardByDow(slots, prevWeekend);
   return (want: Want) => {
-    const hard = want.kind === "quality" || want.kind === "long" || want.kind === "swim_css";
-    const candidates = slots
+    const hard = (want.kind === "quality" || want.kind === "long") && want.sport !== "swim";
+    const open = slots
       .filter((s) => s.sessions.length < 2 && s.cap - s.used >= Math.min(want.minutes, 30))
-      .filter((s) => !s.sessions.some((x) => x.sport === want.sport))
-      .map((s) => {
-        let score = s.cap - s.used; // prefer roomy days
-        const isRunOrBikeHard = hard && want.sport !== "swim";
-        if (isRunOrBikeHard && s.hard) score -= 400;
-        if (isRunOrBikeHard && adjacentHard(slots, s)) score -= 150;
-        if (isRunOrBikeHard && longDays.includes(s)) score -= 300;
-        if (!hard && longDays.includes(s)) score -= 120;
-        if (want.sport === "swim" && s.sessions.some((x) => x.kind === "long")) score -= 200;
-        if (s.sessions.length === 0) score += 60; // spread sessions out
-        return { s, score };
-      })
-      .sort((a, b) => b.score - a.score);
-    return candidates[0]?.s ?? null;
+      .filter((s) => !s.sessions.some((x) => x.sport === want.sport));
+    const spaced = hard ? open.filter((s) => !hardOn(s.dow - 1).has(want.sport) && !hardOn(s.dow + 1).has(want.sport)) : open;
+    const pool = spaced.length ? spaced : open;
+    const scored = pool.map((s) => {
+      const room = s.cap - s.used;
+      let score = room >= want.minutes ? 100 + Math.min(room - want.minutes, 60) / 2 : -2 * (want.minutes - room);
+      let strained = hard && !spaced.length;
+      if (hard) {
+        // Doubling up (e.g. bike intervals + quality run off the bike) beats three hard days in a row.
+        if (s.hard.size) score -= 250;
+        const before = hardOn(s.dow - 1).size > 0;
+        const after = hardOn(s.dow + 1).size > 0;
+        if (before || after) score -= 80;
+        // Three hard days in a row (any sports) is too much accumulated fatigue.
+        if ((before && after) || (before && hardOn(s.dow - 2).size) || (after && hardOn(s.dow + 2).size)) {
+          score -= 450;
+          strained = true;
+        }
+        if (longDays.includes(s)) score -= 300;
+      } else {
+        if (longDays.includes(s)) score -= 120;
+        // Easy run the day after a long/hard run is fine; the day before a hard run less so.
+        if (want.sport !== "swim" && hardOn(s.dow + 1).has(want.sport)) score -= 40;
+      }
+      if (want.sport === "swim" && s.sessions.some((x) => x.kind === "long")) score -= 200;
+      if (s.sessions.length === 0) score += 60;
+      return { s, score, strained };
+    });
+    scored.sort((a, b) => b.score - a.score || a.s.dow - b.s.dow);
+    return scored[0] ? { slot: scored[0].s, strained: scored[0].strained } : null;
   };
+}
+
+/**
+ * The two long days. Primary (long ride, or long run in run-only plans): the starred day with the
+ * most time. Secondary (long run in triathlon plans): a second starred day if there is one, else the
+ * day after the primary (Sat ride → Sun run, the standard Ironman "big weekend": running on tired
+ * legs is specific practice, and the rest of the week stays free for quality), else the day before,
+ * else the roomiest day that isn't next to the primary.
+ */
+function pickLongDays(trainable: DaySlot[]): DaySlot[] {
+  const byRoom = [...trainable].sort((a, b) => Number(b.isLong) - Number(a.isLong) || b.cap - a.cap || a.dow - b.dow);
+  const primary = byRoom[0];
+  if (!primary) return [];
+  const starred = byRoom.filter((s) => s.isLong && s !== primary);
+  const roomy = (s: DaySlot | undefined) => !!s && s.cap >= 60;
+  const at = (dow: number) => trainable.find((s) => s.dow === dow);
+  const secondary =
+    starred[0] ??
+    [at(primary.dow + 1), at(primary.dow - 1)].find(roomy) ??
+    byRoom.find((s) => s !== primary && Math.abs(s.dow - primary.dow) > 1) ??
+    byRoom[1];
+  return [primary, secondary].filter((s): s is DaySlot => !!s);
 }
 
 function specFor(want: Want, ctx: LibraryContext, strides: boolean): SessionSpec {
@@ -460,6 +515,7 @@ export function generatePlan(req: PlanRequest): GeneratedPlan {
 
   const phaseCounters: Record<string, number> = {};
   const weeks: PlannedWeek[] = [];
+  let prevWeekendHard: Set<Sport>[] = [new Set(), new Set()];
   for (let w = 0; w < phases.length; w++) {
     const phase = phases[w];
     const weekStart = addDays(firstMonday, w * 7);
@@ -483,16 +539,15 @@ export function generatePlan(req: PlanRequest): GeneratedPlan {
     if (phase === "race" && raceDate) {
       raceSlot = slots.find((s) => s.date === raceDate);
       if (!raceSlot) {
-        raceSlot = { dow: dowMon(raceDate), date: raceDate, cap: 999, isLong: true, used: 0, hard: true, sessions: [] };
+        raceSlot = { dow: dowMon(raceDate), date: raceDate, cap: 999, isLong: true, used: 0, hard: new Set(), sessions: [] };
         slots.push(raceSlot);
       }
       raceSlot.cap = 0;
-      raceSlot.hard = true;
+      raceSlot.hard = new Set(["run", "bike"]);
       // No training the day before the race except a short shakeout.
     }
     const trainable = slots.filter((s) => s !== raceSlot && (!raceDate || s.date < raceDate));
-    const longCandidates = [...trainable].sort((a, b) => Number(b.isLong) - Number(a.isLong) || b.cap - a.cap);
-    const longDays = longCandidates.slice(0, 2).sort((a, b) => a.dow - b.dow);
+    const longDays = pickLongDays(trainable);
 
     const wants = phase === "race" && raceDate ? [] : weekWants(hours, phase, ctx.race, split, req.limiter, req.level);
     if (phase === "race" && raceDate) {
@@ -501,27 +556,30 @@ export function generatePlan(req: PlanRequest): GeneratedPlan {
         if (date < start) continue;
         let slot = trainable.find((t) => t.date === date);
         if (!slot) {
-          slot = { dow: dowMon(date), date, cap: 120, isLong: false, used: 0, hard: false, sessions: [] };
+          slot = { dow: dowMon(date), date, cap: 120, isLong: false, used: 0, hard: new Set(), sessions: [] };
           trainable.push(slot);
         }
-        place(trainable, spec, slot, 30, false);
+        place(spec, slot, 30, false);
       }
     }
-    const choose = makeChooser(trainable, longDays);
+    const choose = makeChooser(trainable, longDays, prevWeekendHard);
     let easyRunCount = 0;
     let longBikeSlot: DaySlot | null = null;
 
-    for (const want of wants) {
+    for (let want of wants) {
       let slot: DaySlot | null = null;
       if (want.kind === "long") {
         const bikeFirst = want.sport === "bike" || split.bike === 0;
-        const preferred = bikeFirst ? longDays.find((d) => d.isLong) ?? longDays[0] : longDays.find((d) => d !== longBikeSlot) ?? longDays[1];
-        slot = preferred && preferred.cap - preferred.used >= Math.min(want.minutes, 45) && !preferred.sessions.some((s) => s.sport === want.sport) ? preferred : choose(want);
+        const preferred = bikeFirst ? longDays[0] : longDays.find((d) => d !== longBikeSlot);
+        slot = preferred && preferred.cap - preferred.used >= Math.min(want.minutes, 45) && !preferred.sessions.some((s) => s.sport === want.sport) ? preferred : choose(want)?.slot ?? null;
         if (want.sport === "bike") longBikeSlot = slot;
       } else if (want.kind === "brick") {
-        slot = longBikeSlot && longBikeSlot.sessions.length < 2 ? longBikeSlot : choose(want);
+        slot = longBikeSlot && longBikeSlot.sessions.length < 2 ? longBikeSlot : choose(want)?.slot ?? null;
       } else {
-        slot = choose(want);
+        const pick = choose(want);
+        slot = pick?.slot ?? null;
+        // No day keeps 48 h between hard sessions: an easy session beats stacked fatigue.
+        if (pick?.strained && want.kind === "quality") want = { ...want, kind: "easy", priority: 6 };
       }
       if (!slot) continue;
       const room = slot.cap - slot.used;
@@ -529,8 +587,9 @@ export function generatePlan(req: PlanRequest): GeneratedPlan {
       if (room < 20) continue;
       const strides = want.sport === "run" && want.kind === "easy" && easyRunCount++ === 0 && phase !== "race";
       const spec = specFor({ ...want, minutes }, ctx, strides);
-      place(trainable, spec, slot, minutes, want.kind === "quality" || want.kind === "long");
+      place(spec, slot, minutes, want.kind === "quality" || want.kind === "long");
     }
+    prevWeekendHard = [5, 6].map((d) => trainable.find((s) => s.dow === d)?.hard ?? new Set<Sport>());
 
     if (raceSlot && raceDate) {
       const def = RACES[race];

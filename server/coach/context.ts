@@ -31,6 +31,7 @@ import {
   getActivitiesBetween,
   getPlanWorkoutsBetween,
   getThresholdState,
+  getThresholds,
   prefsFromProfile,
   todayInTz,
   type AthletePrefs,
@@ -86,10 +87,15 @@ export function activityLine(r: Run, prefs: AthletePrefs): string {
   return `[${r.id}] ${bits.join(" · ")}`;
 }
 
+/** One line per planned workout: id, date, sport, title, status, duration, TSS. */
+export function plannedHead(w: PlanWorkout): string {
+  const status = w.isCompleted ? "DONE" : w.status === "skipped" ? "SKIPPED" : "planned";
+  return `[${w.id}] ${w.date} ${w.sport ?? w.workoutType} "${w.title}"${w.isKey ? " (key)" : ""} ${status} · ${formatDuration(w.plannedDurationSec ?? 0)} · ${Math.round(w.plannedTss ?? 0)} TSS`;
+}
+
 export function plannedLine(w: PlanWorkout, th: Thresholds, prefs: AthletePrefs, withDsl = false): string {
   const structure = isValidStructure(w.structure) ? (w.structure as WorkoutStructure) : null;
-  const status = w.isCompleted ? "DONE" : w.status === "skipped" ? "SKIPPED" : "planned";
-  const head = `[${w.id}] ${w.date} ${w.sport ?? w.workoutType} "${w.title}"${w.isKey ? " (key)" : ""} ${status} · ${formatDuration(w.plannedDurationSec ?? 0)} · ${Math.round(w.plannedTss ?? 0)} TSS`;
+  const head = plannedHead(w);
   if (!structure) return `${head}${w.description ? ` — ${w.description.slice(0, 160)}` : ""}`;
   const desc = describeWorkout(structure, th, prefs);
   return withDsl ? `${head}\n    DSL: ${structureToDsl(structure, prefs.pool).replace(/\n/g, " | ")}\n    = ${desc}` : `${head} — ${desc}`;
@@ -101,32 +107,38 @@ export interface OverviewData {
   text: string;
 }
 
-/** Full athlete overview — the coach's primary briefing tool. */
-export async function buildOverview(userId: string): Promise<OverviewData> {
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function weekdayOf(date: string): string {
+  return new Date(date + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
+}
+
+/**
+ * Athlete card: who the athlete is and what they're training for. Changes rarely. Sent with the
+ * first message of every conversation (so most questions need no tool call) and inside the overview.
+ */
+async function athleteCard(userId: string, today: string): Promise<string[]> {
   const profile = await storage.getProfile(userId);
   const prefs = prefsFromProfile(profile);
-  const today = todayInTz(prefs.tz);
-  const [thState, fitness, recent, upcoming, plan, health, strava, memories, wellness] = await Promise.all([
+  const [thState, plan, health, strava, memories] = await Promise.all([
     getThresholdState(userId),
-    getFitness(userId, prefs.tz, { historyDays: 28 }),
-    getActivitiesBetween(userId, addDays(today, -14), today),
-    getPlanWorkoutsBetween(userId, today, addDays(today, 10)),
     getActivePlan(userId),
     storage.getHealthLogs(userId, 60),
     storage.getIntegration(userId, "strava"),
     listMemories(userId),
-    getWellness(userId, today),
   ]);
   const th = thState.values;
   const lines: string[] = [];
-  lines.push(`TODAY: ${today} (${new Date(today + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" })})`);
   lines.push(
     `ATHLETE: ${profile?.fullName ?? "athlete"}, level ${profile?.fitnessLevel ?? "?"}, age ${profile?.age ?? "?"}, sports ${JSON.stringify(profile?.sports ?? [])}, units ${prefs.units}, pool ${prefs.pool}, weekly time ${profile?.weeklyHoursGoal ?? "?"} h, limiter ${profile?.limiter ?? "none stated"}`,
   );
   const sched = (profile?.weeklySchedule as { day: number; maxMinutes: number; isLongDay: boolean }[] | null) ?? [];
   if (sched.length) {
-    const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    lines.push(`AVAILABILITY: ${sched.map((d) => `${names[d.day]} ${d.maxMinutes}min${d.isLongDay ? " (long day)" : ""}`).join(", ")}`);
+    const order = [1, 2, 3, 4, 5, 6, 0];
+    const byDay = new Map(sched.map((d) => [d.day, d]));
+    lines.push(
+      `AVAILABILITY: ${order.map((d) => { const x = byDay.get(d); return x ? `${DAY_NAMES[d]} ${x.maxMinutes}min${x.isLongDay ? " (long day)" : ""}` : `${DAY_NAMES[d]} rest`; }).join(", ")}`,
+    );
   }
   const fuel = [
     profile?.sweatRateMlPerH ? `sweat ${profile.sweatRateMlPerH} ml/h` : null,
@@ -142,7 +154,7 @@ export async function buildOverview(userId: string): Promise<OverviewData> {
   const race = profile?.goalRaceType as RaceType | null;
   if (race && RACES[race] && profile?.targetRaceDate) {
     const days = daysBetween(today, profile.targetRaceDate);
-    lines.push(`GOAL RACE: ${RACES[race].label} on ${profile.targetRaceDate} (${days} days)`);
+    lines.push(`GOAL RACE: ${profile.targetRace ? `${profile.targetRace}, ` : ""}${RACES[race].label} on ${profile.targetRaceDate} (${days} days)`);
     const pacing = racePacing(race, th, profile.fitnessLevel);
     if (pacing) {
       const p: string[] = [];
@@ -152,7 +164,41 @@ export async function buildOverview(userId: string): Promise<OverviewData> {
       if (pacing.totalSec) p.push(`total ≈ ${formatClock(pacing.totalSec)}`);
       lines.push(`  Current race-pace targets (model estimate from thresholds): ${p.join("; ")}`);
     }
+  } else {
+    lines.push("GOAL RACE: none set");
   }
+  if (plan) {
+    const pd = plan.planData as { weeks?: { start: string; phase: string; targetHours: number }[] } | null;
+    const wk = pd?.weeks?.filter((w) => w.start <= today).pop();
+    lines.push(`PLAN: "${plan.title}" ${plan.startDate} → ${plan.endDate}${wk ? `; this week: ${wk.phase} phase, target ${wk.targetHours} h` : ""}`);
+  } else {
+    lines.push("PLAN: none yet");
+  }
+  const active = health.filter((h) => !h.resolvedDate);
+  if (active.length) lines.push(`HEALTH (active): ${active.map((h) => `[${h.id}] ${h.date} ${h.type} sev ${h.severity}${h.bodyPart ? ` ${h.bodyPart}` : ""}: ${h.description}`).join("; ")}`);
+  lines.push(
+    `DATA: Strava ${strava?.isActive ? `connected, last sync ${strava.lastSyncedAt ? new Date(strava.lastSyncedAt).toISOString() : "never"}` : "NOT connected"}`,
+  );
+  lines.push("COACH NOTES (long-term memory; use remember/forget to maintain):");
+  if (memories.length) for (const m of memories) lines.push(`  [${m.id}] ${m.category}: ${m.note}`);
+  else lines.push("  none yet");
+  return lines;
+}
+
+/** Full athlete overview — the coach's briefing tool: the card plus fitness, upcoming and recent training. */
+export async function buildOverview(userId: string): Promise<OverviewData> {
+  const profile = await storage.getProfile(userId);
+  const prefs = prefsFromProfile(profile);
+  const today = todayInTz(prefs.tz);
+  const [card, th, fitness, recent, upcoming, wellness] = await Promise.all([
+    athleteCard(userId, today),
+    getThresholds(userId),
+    getFitness(userId, prefs.tz, { historyDays: 28 }),
+    getActivitiesBetween(userId, addDays(today, -14), today),
+    getPlanWorkoutsBetween(userId, today, addDays(today, 10)),
+    getWellness(userId, today),
+  ]);
+  const lines: string[] = [`TODAY: ${today} (${weekdayOf(today)})`, ...card];
   if (th.runThresholdPace) {
     const v = vdotFromThresholdPace(th.runThresholdPace);
     lines.push(
@@ -162,56 +208,42 @@ export async function buildOverview(userId: string): Promise<OverviewData> {
   lines.push(
     `FITNESS: CTL ${fitness.ctl}, ATL ${fitness.atl}, TSB ${fitness.tsb} (${fitness.form.label}), ramp ${fitness.rampRate ?? "n/a"} CTL/wk. By sport CTL: swim ${fitness.bySport.swim.ctl}, bike ${fitness.bySport.bike.ctl}, run ${fitness.bySport.run.ctl}`,
   );
-  if (plan) {
-    const pd = plan.planData as { phases?: { phase: string; startWeek: number; weeks: number }[]; weeks?: { start: string; phase: string; targetHours: number }[] } | null;
-    const wk = pd?.weeks?.filter((w) => w.start <= today).pop();
-    lines.push(`PLAN: "${plan.title}" ${plan.startDate} → ${plan.endDate}${wk ? `; this week: ${wk.phase} phase, target ${wk.targetHours} h` : ""}`);
-  } else {
-    lines.push("PLAN: none yet");
-  }
-  lines.push("UPCOMING (next 10 days):");
-  if (upcoming.length) for (const w of upcoming) lines.push(`  ${plannedLine(w, th, prefs)}`);
+  lines.push(wellnessText(wellness));
+  lines.push("UPCOMING (next 10 days; get_plan with workout_ids for targets):");
+  if (upcoming.length) for (const w of upcoming) lines.push(`  ${plannedHead(w)}`);
   else lines.push("  nothing scheduled");
   lines.push("RECENT ACTIVITIES (14 days):");
   if (recent.length) for (const r of recent) lines.push(`  ${activityLine(r, prefs)}`);
   else lines.push("  none");
-  const active = health.filter((h) => !h.resolvedDate);
-  lines.push(wellnessText(wellness));
-  if (active.length) lines.push(`HEALTH (active): ${active.map((h) => `[${h.id}] ${h.date} ${h.type} sev ${h.severity}${h.bodyPart ? ` ${h.bodyPart}` : ""}: ${h.description}`).join("; ")}`);
-  lines.push(
-    `DATA: Strava ${strava?.isActive ? `connected, last sync ${strava.lastSyncedAt ? new Date(strava.lastSyncedAt).toISOString() : "never"}` : "NOT connected"}`,
-  );
-  lines.push("COACH NOTES (long-term memory; use remember/forget to maintain):");
-  if (memories.length) for (const m of memories) lines.push(`  [${m.id}] ${m.category}: ${m.note}`);
-  else lines.push("  none yet");
   return { prefs, today, text: lines.join("\n") };
 }
 
-/** Short per-turn context appended to each user message (keeps the cached prefix stable). */
+/**
+ * Context appended to each user message (keeps the cached prefix stable). Every turn: date, form,
+ * today/tomorrow, latest activities, thresholds, wellness. First turn of a conversation: the
+ * athlete card too. It stays in the history, so later turns don't repeat it.
+ */
 export async function buildTurnContext(userId: string, opts: { firstTurn?: boolean } = {}): Promise<string> {
   const profile = await storage.getProfile(userId);
   const prefs = prefsFromProfile(profile);
   const today = todayInTz(prefs.tz);
-  const [fitness, todays, last, wellness] = await Promise.all([
+  const [fitness, todays, last, wellness, th, card] = await Promise.all([
     getFitness(userId, prefs.tz, { historyDays: 1 }),
     getPlanWorkoutsBetween(userId, today, addDays(today, 1)),
     getActivitiesBetween(userId, addDays(today, -2), today),
     getWellness(userId, today),
+    getThresholds(userId),
+    opts.firstTurn ? athleteCard(userId, today) : Promise.resolve(null),
   ]);
-  const th = (await getThresholdState(userId)).values;
-  const weekday = new Date(today + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
   const parts = [
-    `Today is ${weekday} ${today} (athlete's local date).`,
+    `Today is ${weekdayOf(today)} ${today} (athlete's local date).`,
     `Form: CTL ${fitness.ctl}, ATL ${fitness.atl}, TSB ${fitness.tsb} (${fitness.form.label}).`,
     todays.length ? `Planned today/tomorrow: ${todays.map((w) => `${w.date} ${w.title}${w.isCompleted ? " (done)" : ""} [${w.id}]`).join("; ")}.` : "Nothing planned today/tomorrow.",
     last.length ? `Latest activities: ${last.slice(0, 3).map((r) => activityLine(r, prefs)).join(" | ")}` : "",
-    `Thresholds: ${thresholdsText(th, prefs)}.`,
+    card ? "" : `Thresholds: ${thresholdsText(th, prefs)}.`,
     wellness ? wellnessText(wellness) : "",
   ];
-  if (opts.firstTurn) {
-    const memories = await listMemories(userId);
-    if (memories.length) parts.push(`Coach notes: ${memories.map((m) => `[${m.id}] ${m.category}: ${m.note}`).join(" | ")}`);
-  }
+  if (card) parts.push(...card);
   return parts.filter(Boolean).join("\n");
 }
 

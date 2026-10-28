@@ -72,7 +72,11 @@ export async function createPlanForUser(userId: string, opts: CreatePlanOptions)
   const today = todayInTz(prefs.tz);
   const race: RaceType = (opts.race ?? (profile?.goalRaceType as RaceType | null) ?? "general") as RaceType;
   const raceDate = opts.raceDate ?? profile?.targetRaceDate ?? null;
-  const startDate = opts.startDate && opts.startDate >= today ? opts.startDate : today;
+  // A rebuild without a start date keeps the current plan's future start, so sessions scheduled
+  // before it (e.g. a coach-written lead-up block) survive.
+  const current = opts.startDate ? null : await getActivePlan(userId);
+  const requested = opts.startDate ?? (current && current.startDate > today ? current.startDate : null);
+  const startDate = requested && requested >= today ? requested : today;
   const level = profile?.fitnessLevel ?? "intermediate";
   const th = await planningThresholds(userId, level);
 

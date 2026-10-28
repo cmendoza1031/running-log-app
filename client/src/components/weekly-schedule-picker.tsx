@@ -46,15 +46,15 @@ export function WeeklySchedulePicker({
     void IOSFeedbackManager.lightImpact();
   };
 
+  // Up to two long days (e.g. Sat long ride + Sun long run). Starring a third replaces one of the other two.
   const toggleLongDay = (day: number) => {
     const isCurrentlyLong = schedule.find((d) => d.day === day)?.isLongDay ?? false;
-    onChange(
-      isCurrentlyLong
-        ? schedule.map((d) => (d.day === day ? { ...d, isLongDay: false } : d))
-        : schedule.map((d) => ({ ...d, isLongDay: d.day === day }))
-    );
+    const starred = schedule.filter((d) => d.isLongDay).map((d) => d.day);
+    const keep = isCurrentlyLong ? starred.filter((d) => d !== day) : [...starred.slice(-1), day];
+    onChange(schedule.map((d) => ({ ...d, isLongDay: keep.includes(d.day) })));
     void IOSFeedbackManager.mediumImpact();
   };
+  const restDays = DAY_DISPLAY.filter(({ day }) => !schedule.some((d) => d.day === day));
 
   const sorted = [...schedule].sort(
     (a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day)
@@ -85,7 +85,7 @@ export function WeeklySchedulePicker({
               >
                 {isLong ? "★" : short}
               </div>
-              <span className="text-[10px] font-medium text-muted-foreground">{label}</span>
+              <span className="text-[10px] font-medium text-muted-foreground">{isSelected ? label : "Rest"}</span>
             </button>
           );
         })}
@@ -154,7 +154,12 @@ export function WeeklySchedulePicker({
       )}
 
       <p className="text-xs text-muted-foreground text-center mt-4">
-        Star a day to mark it as your long workout day
+        Star up to 2 long days (e.g. Sat long ride, Sun long run). With one star, the long run goes on the day next to it.
+      </p>
+      <p className="text-xs text-muted-foreground text-center mt-1.5">
+        {restDays.length
+          ? `Rest: ${restDays.map((d) => d.label).join(", ")}. Days you don't pick get no training.`
+          : "No rest day — most athletes adapt better with at least one full day off. Tap a day to make it a rest day."}
       </p>
     </div>
   );

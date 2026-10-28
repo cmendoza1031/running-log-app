@@ -7,6 +7,11 @@
  * - History is stored verbatim (content blocks, including thinking) and only ever appended —
  *   required for thinking-block validity and good for prompt-cache hits. Per-turn context goes
  *   into the new user message, never into the (cached) system prompt.
+ * - Caching: tools + system prompt (identical for every athlete and thread) carry a 1-hour
+ *   breakpoint, so a new chat, an edited message or a reply after a break still reads them from
+ *   cache. The growing conversation tail uses automatic 5-minute caching.
+ * - A deploy that changes a tool description invalidates thinking blocks in older threads;
+ *   "drop_block" drops those blocks instead of failing the request.
  */
 import Anthropic from "@anthropic-ai/sdk";
 import type { Request, Response } from "express";
@@ -28,7 +33,8 @@ import {
 export const COACH_MODEL = process.env.COACH_MODEL || "claude-opus-5-5";
 const COACH_EFFORT = (process.env.COACH_EFFORT as "low" | "medium" | "high" | undefined) || "medium";
 const MAX_ITERATIONS = 14;
-const BETAS: Anthropic.Beta.AnthropicBeta[] = ["server-side-fallback-2026-07-01", "thinking-display-updates-2026-08-18"];
+const BETAS: Anthropic.Beta.AnthropicBeta[] = ["server-side-fallback-2026-07-01", "thinking-display-updates-2026-08-18", "thinking-binding-controls-2026-08-01"];
+const SYSTEM: Anthropic.Beta.BetaTextBlockParam[] = [{ type: "text", text: COACH_SYSTEM_PROMPT, cache_control: { type: "ephemeral", ttl: "1h" } }];
 
 let client: Anthropic | null = null;
 function anthropic() {
@@ -112,10 +118,10 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
         max_tokens: 32000,
         betas: BETAS,
         fallbacks: "default",
-        thinking: { type: "adaptive", display: "updates" },
+        thinking: { type: "adaptive", display: "updates", block_binding: { prefix_mismatch_behavior: "drop_block" } },
         output_config: { effort: COACH_EFFORT },
         cache_control: { type: "ephemeral" },
-        system: COACH_SYSTEM_PROMPT,
+        system: SYSTEM,
         tools: TOOLS,
         messages,
       });

@@ -1,6 +1,6 @@
 /**
  * Claude API cost tracking. Prices are USD per million tokens (first-party API rates, Oct 2026).
- * Cache writes use the 5-minute TTL rate (1.25× input).
+ * Cache writes: 5-minute TTL 1.25× input, 1-hour TTL 2× input.
  */
 import { and, eq, gte, sql } from "drizzle-orm";
 import { aiUsage } from "@shared/schema";
@@ -18,6 +18,7 @@ export interface UsageLike {
   output_tokens?: number | null;
   cache_read_input_tokens?: number | null;
   cache_creation_input_tokens?: number | null;
+  cache_creation?: { ephemeral_1h_input_tokens?: number | null } | null;
 }
 
 export function costUsd(model: string, u: UsageLike): number {
@@ -27,7 +28,8 @@ export function costUsd(model: string, u: UsageLike): number {
     ((u.input_tokens ?? 0) * p.input +
       (u.output_tokens ?? 0) * p.output +
       (u.cache_read_input_tokens ?? 0) * p.cacheRead +
-      (u.cache_creation_input_tokens ?? 0) * p.input * 1.25) /
+      (u.cache_creation_input_tokens ?? 0) * p.input * 1.25 +
+      (u.cache_creation?.ephemeral_1h_input_tokens ?? 0) * p.input * 0.75) / // 1h writes: 2× total
     1_000_000
   );
 }

@@ -36,7 +36,7 @@ import {
   saveMemory,
   archiveMemory,
 } from "../data";
-import { buildOverview, activityLine, plannedLine, zonesText, thresholdsText } from "./context";
+import { buildOverview, activityLine, plannedHead, plannedLine, zonesText, thresholdsText } from "./context";
 import { describeActivityForModel } from "./analysis";
 import { getFitness, weeklyVolume, weekStart, intensityDistribution, activityMovingSec } from "../analytics/load";
 import { createPlanForUser, adaptUpcoming, buildWorkoutFromDsl, ensureActivePlan, planningThresholds } from "../planning/service";
@@ -68,7 +68,7 @@ const RACE_TYPES = Object.keys(RACES) as [RaceType, ...RaceType[]];
 const getOverview = defineTool({
   name: "get_athlete_overview",
   description:
-    "PRIMARY BRIEFING. Profile, availability, thresholds (+ pending auto-detected suggestions), goal race with model race-pace targets, run race predictions, fitness/fatigue/form (CTL/ATL/TSB, ramp) overall and by sport, current plan/phase, the next 10 days of planned workouts (with ids), the last 14 days of activities (with ids and AI note headlines), active health issues, and Strava sync status. Call this before giving training advice, unless you already called it in this conversation and nothing changed.",
+    "Full briefing: the athlete card (profile, availability, thresholds, goal race + pacing, plan phase, health, coach notes — already in the first message of each conversation) plus run race predictions, fitness/fatigue/form (CTL/ATL/TSB, ramp) overall and by sport, wellness, the next 10 days of planned workouts (one line each, with ids) and the last 14 days of activities (with ids and AI note headlines). Call it for weekly reviews, planning advice or when the card may be stale; not for simple questions the card answers.",
   schema: z.object({}),
   status: "Reviewing your training…",
   run: async (_i, ctx) => (await buildOverview(ctx.userId)).text,
@@ -89,16 +89,26 @@ const getZones = defineTool({
 
 const getActivities = defineTool({
   name: "get_activities",
-  description: "List completed activities in a date range (max 120 days), newest first, one line each with id, duration, distance, pace/power, HR, TSS, IF, RPE, AI note headline.",
-  schema: z.object({ start_date: DATE, end_date: DATE, sport: SPORT.optional() }),
+  description:
+    "Completed activities, newest first, one line each with id, duration, distance, pace/power, HR, TSS, IF, RPE, AI note headline. Without dates: the most recent `limit` activities from the last 120 days. With dates: that range (max 120 days). For week-by-week volume use get_training_trends instead.",
+  schema: z.object({
+    start_date: DATE.optional(),
+    end_date: DATE.optional().describe("Defaults to today"),
+    sport: SPORT.optional(),
+    limit: z.number().int().min(1).max(150).default(10).describe("Max activities returned (default 10)"),
+  }),
   status: "Looking through your workouts…",
   run: async (i, ctx) => {
     const profile = await storage.getProfile(ctx.userId);
     const prefs = prefsFromProfile(profile);
-    const start = i.start_date < addDays(i.end_date, -120) ? addDays(i.end_date, -120) : i.start_date;
-    const acts = (await getActivitiesBetween(ctx.userId, start, i.end_date)).filter((r) => !i.sport || toSport(r.sportType) === i.sport);
+    const end = i.end_date ?? todayInTz(prefs.tz);
+    const from = i.start_date ?? addDays(end, -120);
+    const start = from < addDays(end, -120) ? addDays(end, -120) : from;
+    const acts = (await getActivitiesBetween(ctx.userId, start, end)).filter((r) => !i.sport || toSport(r.sportType) === i.sport);
     if (!acts.length) return "No activities in that range.";
-    return acts.slice(0, 150).map((r) => activityLine(r, prefs)).join("\n");
+    const shown = acts.slice(0, i.limit);
+    const more = acts.length - shown.length;
+    return [...shown.map((r) => activityLine(r, prefs)), ...(more > 0 ? [`(+${more} older in range; raise limit or narrow dates to see them)`] : [])].join("\n");
   },
 });
 
@@ -181,24 +191,37 @@ const getTrends = defineTool({
 
 const getPlan = defineTool({
   name: "get_plan",
-  description: "Planned workouts in a date range (max 60 days) with ids, status, the workout DSL, and the resolved targets in the athlete's units. Use before editing workouts.",
-  schema: z.object({ start_date: DATE, end_date: DATE }),
+  description:
+    "Planned workouts. With a date range (max 60 days): one line per workout (id, date, sport, title, key, status, duration, TSS) plus the plan phase of each week. With workout_ids: full detail for those workouts (workout DSL + resolved targets in the athlete's units) — get this for the sessions you are about to rewrite or explain step by step. detail=\"full\" gives full detail for a whole range (expensive; avoid for more than a week).",
+  schema: z.object({
+    start_date: DATE.optional(),
+    end_date: DATE.optional(),
+    workout_ids: z.array(z.string()).max(20).optional(),
+    detail: z.enum(["summary", "full"]).default("summary"),
+  }),
   status: "Opening your calendar…",
   run: async (i, ctx) => {
     const profile = await storage.getProfile(ctx.userId);
     const prefs = prefsFromProfile(profile);
     const th = await planningThresholds(ctx.userId, profile?.fitnessLevel);
-    const end = i.end_date > addDays(i.start_date, 60) ? addDays(i.start_date, 60) : i.end_date;
-    const ws = await getPlanWorkoutsBetween(ctx.userId, i.start_date, end);
+    if (i.workout_ids?.length) {
+      const found = await Promise.all(i.workout_ids.map((id) => getPlanWorkout(ctx.userId, id)));
+      return i.workout_ids.map((id, k) => (found[k] ? plannedLine(found[k]!, th, prefs, true) : `[${id}] not found`)).join("\n");
+    }
+    const start = i.start_date;
+    if (!start || !i.end_date) return "ERROR: pass start_date and end_date, or workout_ids.";
+    const end = i.end_date > addDays(start, 60) ? addDays(start, 60) : i.end_date;
+    const ws = await getPlanWorkoutsBetween(ctx.userId, start, end);
     const plan = await getActivePlan(ctx.userId);
     const pd = plan?.planData as { phases?: unknown; weeks?: { start: string; phase: string; targetHours: number }[] } | null;
     const head = plan
       ? `Plan "${plan.title}" ${plan.startDate}→${plan.endDate}. Weeks in range: ${(pd?.weeks ?? [])
-          .filter((w) => w.start >= addDays(i.start_date, -6) && w.start <= end)
+          .filter((w) => w.start >= addDays(start, -6) && w.start <= end)
           .map((w) => `${w.start} ${w.phase} ${w.targetHours}h`)
           .join(", ")}`
       : "No active plan.";
-    return [head, ...(ws.length ? ws.map((w) => plannedLine(w, th, prefs, true)) : ["No workouts in range."])].join("\n");
+    const line = (w: (typeof ws)[number]) => (i.detail === "full" ? plannedLine(w, th, prefs, true) : plannedHead(w));
+    return [head, ...(ws.length ? ws.map(line) : ["No workouts in range."])].join("\n");
   },
 });
 
@@ -225,9 +248,6 @@ const createPlan = defineTool({
       weeklyHours: i.weekly_hours ?? null,
       limiter: i.limiter ?? null,
     });
-    const profile = await storage.getProfile(ctx.userId);
-    const prefs = prefsFromProfile(profile);
-    const th = await planningThresholds(ctx.userId, profile?.fitnessLevel);
     const lines = [
       `Created "${plan.title}" ${plan.startDate} → ${plan.endDate}: ${workoutCount} workouts over ${generated.weeks.length} weeks.`,
       `Phases: ${generated.phases.map((p) => `${p.phase} ×${p.weeks}`).join(" → ")}`,
@@ -236,7 +256,7 @@ const createPlan = defineTool({
       "First two weeks:",
     ];
     const ws = await getPlanWorkoutsBetween(ctx.userId, plan.startDate, addDays(plan.startDate, 13));
-    for (const w of ws) lines.push(`  ${plannedLine(w, th, prefs)}`);
+    for (const w of ws) lines.push(`  ${plannedHead(w)}`);
     return lines.join("\n");
   },
 });
