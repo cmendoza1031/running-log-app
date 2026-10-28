@@ -172,6 +172,7 @@ export async function analyzeActivity(userId: string, activityId: string): Promi
   const prompt = `${ctx.join("\n")}\n\n${plannedText}\n\nWhat the athlete did:\n${describeActivityForModel(run, th, prefs)}\n\nWrite the post-workout note.`;
 
   try {
+    const startedAt = Date.now();
     const res = await anthropic().messages.parse({
       model: ANALYSIS_MODEL,
       max_tokens: 1200,
@@ -179,7 +180,7 @@ export async function analyzeActivity(userId: string, activityId: string): Promi
       messages: [{ role: "user", content: prompt }],
       output_config: { format: zodOutputFormat(AnalysisSchema) },
     });
-    void logAiUsage(userId, "analysis", res.model, res.usage);
+    void logAiUsage(userId, "analysis", res.model, res.usage, { activityId: run.id, stopReason: res.stop_reason, latencyMs: Date.now() - startedAt });
     const parsed = res.parsed_output;
     if (!parsed) return null;
     // Guardrail: plan changes need evidence beyond a single model judgment.

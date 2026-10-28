@@ -32,10 +32,25 @@ export function costUsd(model: string, u: UsageLike): number {
   );
 }
 
+export interface UsageDetails {
+  threadId?: string;
+  activityId?: string;
+  iteration?: number;
+  tools?: string[];
+  stopReason?: string | null;
+  latencyMs?: number;
+}
+
 /** Never throws: cost logging must not break a coach reply or a workout note. */
-export async function logAiUsage(userId: string, kind: "coach" | "analysis", model: string, u: UsageLike): Promise<void> {
+export async function logAiUsage(userId: string, kind: "coach" | "analysis", model: string, u: UsageLike, d: UsageDetails = {}): Promise<void> {
   try {
     await db.insert(aiUsage).values({
+      threadId: d.threadId,
+      activityId: d.activityId,
+      iteration: d.iteration,
+      tools: d.tools ?? [],
+      stopReason: d.stopReason ?? null,
+      latencyMs: d.latencyMs,
       userId,
       kind,
       model,

@@ -322,6 +322,13 @@ export const aiUsage = pgTable("ai_usage", {
   cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
   cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
   costUsd: doublePrecision("cost_usd").notNull().default(0),
+  threadId: uuid("thread_id"),
+  activityId: uuid("activity_id"),
+  /** 0 = first API call of a coach turn. */
+  iteration: integer("iteration"),
+  tools: text("tools").array().notNull().default(sql`'{}'`),
+  stopReason: text("stop_reason"),
+  latencyMs: integer("latency_ms"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

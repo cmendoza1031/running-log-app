@@ -121,6 +121,7 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
       });
 
       liveStream = stream;
+      const startedAt = Date.now();
       stream.on("text", (delta) => send({ type: "token", content: delta }));
       stream.on("streamEvent", (event) => {
         if (event.type === "content_block_start" && event.content_block.type === "tool_use") {
@@ -135,7 +136,11 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
         final = await stream.finalMessage();
         jsonRetries = 0;
       } catch (err) {
-        if (clientGone) break; // aborted by the athlete: nothing from this iteration is stored
+        if (clientGone) {
+          // Aborted by the athlete: nothing from this iteration is stored. Tokens generated so far are billed but unknown here.
+          void logAiUsage(userId, "coach", COACH_MODEL, {}, { threadId: thread.id, iteration: iter, stopReason: "aborted", latencyMs: Date.now() - startedAt });
+          break;
+        }
         // With eager input streaming, an unparseable tool input rejects finalMessage; re-issue the turn.
         if (err instanceof Anthropic.APIError || jsonRetries++ >= 2) throw err;
         console.warn("[coach] tool input not parseable, retrying turn");
@@ -143,7 +148,13 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
         continue;
       }
 
-      void logAiUsage(userId, "coach", final.model, final.usage);
+      void logAiUsage(userId, "coach", final.model, final.usage, {
+        threadId: thread.id,
+        iteration: iter,
+        tools: final.content.filter((b) => b.type === "tool_use").map((b) => (b as Anthropic.Beta.BetaToolUseBlock).name),
+        stopReason: final.stop_reason,
+        latencyMs: Date.now() - startedAt,
+      });
 
       const toolUses = final.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use");
       const iterText = textOf(final.content);
