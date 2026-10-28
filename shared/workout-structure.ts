@@ -258,7 +258,7 @@ function parseStep(src: string, sport: Sport): Step {
 }
 
 export function parseWorkout(dsl: string, sport: Sport): WorkoutStructure {
-  const lines = splitTopLevel(dsl.replace(/\r/g, ""), ["\n", ";", "+"]);
+  const lines = splitTopLevel(dsl.replace(/\r/g, ""), ["\n", ";", "+", "|"]);
   if (!lines.length) throw new WorkoutParseError("Workout is empty");
   const nodes: WorkoutNode[] = [];
   for (const line of lines) {

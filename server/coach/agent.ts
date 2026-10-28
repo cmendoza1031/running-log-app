@@ -22,6 +22,7 @@ import {
   getThread,
   getThreadMessages,
   renameThread,
+  truncateThreadFrom,
 } from "../data";
 
 export const COACH_MODEL = process.env.COACH_MODEL || "claude-opus-5-5";
@@ -47,7 +48,7 @@ function textOf(content: Anthropic.Beta.BetaContentBlock[]): string {
 
 export async function handleChatStream(req: Request, res: Response): Promise<void> {
   const userId = (req as AuthenticatedRequest).userId;
-  const { message, threadId } = req.body as { message?: string; threadId?: string };
+  const { message, threadId, editMessageId } = req.body as { message?: string; threadId?: string; editMessageId?: string };
   const text = message?.trim();
   if (!text) {
     res.status(400).json({ message: "Message is required" });
@@ -68,9 +69,13 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
+  // Stop button / tab closed: stop calling the model. (`req` "close" fires once the body is read, so watch `res`.)
   let clientGone = false;
-  req.on("close", () => {
+  let liveStream: { abort: () => void } | null = null;
+  res.on("close", () => {
+    if (res.writableEnded) return;
     clientGone = true;
+    liveStream?.abort();
   });
   const send = (data: Record<string, unknown>) => {
     if (!clientGone && !res.writableEnded) res.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -78,6 +83,9 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
   const heartbeat = setInterval(() => send({ type: "ping" }), 15000);
 
   try {
+    // Edit: drop the edited message and everything after it, then answer the new text. Truncating the tail
+    // keeps the earlier history byte-identical, so cached prefixes and thinking blocks stay valid.
+    if (editMessageId) await truncateThreadFrom(thread.id, editMessageId);
     const history = await getThreadMessages(thread.id);
     if (!history.length) await renameThread(thread.id, text.slice(0, 60));
     send({ type: "thread", threadId: thread.id });
@@ -87,7 +95,8 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
       { type: "text", text },
       { type: "text", text: `<app_context>\n${context}\n</app_context>` },
     ];
-    await appendThreadMessage({ threadId: thread.id, userId, role: "user", content: userContent, displayText: text, visible: true });
+    const userRow = await appendThreadMessage({ threadId: thread.id, userId, role: "user", content: userContent, displayText: text, visible: true });
+    send({ type: "user_message", id: userRow.id });
 
     const messages: Anthropic.Beta.BetaMessageParam[] = [
       ...history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content as Anthropic.Beta.BetaContentBlockParam[] })),
@@ -97,6 +106,7 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
     let jsonRetries = 0;
     let calledTools = false;
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+      if (clientGone) break;
       const stream = anthropic().beta.messages.stream({
         model: COACH_MODEL,
         max_tokens: 32000,
@@ -110,6 +120,7 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
         messages,
       });
 
+      liveStream = stream;
       stream.on("text", (delta) => send({ type: "token", content: delta }));
       stream.on("streamEvent", (event) => {
         if (event.type === "content_block_start" && event.content_block.type === "tool_use") {
@@ -124,6 +135,7 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
         final = await stream.finalMessage();
         jsonRetries = 0;
       } catch (err) {
+        if (clientGone) break; // aborted by the athlete: nothing from this iteration is stored
         // With eager input streaming, an unparseable tool input rejects finalMessage; re-issue the turn.
         if (err instanceof Anthropic.APIError || jsonRetries++ >= 2) throw err;
         console.warn("[coach] tool input not parseable, retrying turn");
@@ -170,6 +182,7 @@ export async function handleChatStream(req: Request, res: Response): Promise<voi
     }
     send({ type: "done", changedData: calledTools });
   } catch (err) {
+    if (clientGone) return;
     console.error("[coach] error", err);
     const msg =
       err instanceof Anthropic.RateLimitError

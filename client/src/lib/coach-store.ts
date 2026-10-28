@@ -13,6 +13,9 @@ export interface CoachMessage {
   streaming?: boolean;
   status?: string | null;
   error?: boolean;
+  stopped?: boolean;
+  /** Local placeholder until the server returns the stored row id (needed for editing). */
+  pending?: boolean;
 }
 
 interface CoachState {
@@ -28,6 +31,7 @@ interface HistoryResponse {
 }
 
 let state: CoachState = { threadId: null, messages: [], busy: false, loaded: false };
+let controller: AbortController | null = null;
 const listeners = new Set<() => void>();
 
 function setState(patch: Partial<CoachState> | ((s: CoachState) => Partial<CoachState>)) {
@@ -72,29 +76,44 @@ export async function startNewCoachThread(): Promise<void> {
 
 /** Clear on sign-out so the next account doesn't see this chat. */
 export function resetCoachStore() {
+  controller?.abort();
   state = { threadId: null, messages: [], busy: false, loaded: false };
   listeners.forEach((l) => l());
 }
 
-/** Send a message and stream the reply into the store. `onDataChanged` runs when the coach edited training data. */
-export async function sendCoachMessage(text: string, onDataChanged: () => void): Promise<void> {
+/** Stop the reply that is streaming now. What arrived so far stays on screen. */
+export function stopCoachReply() {
+  controller?.abort();
+}
+
+/**
+ * Send a message and stream the reply into the store. `onDataChanged` runs when the coach edited training data.
+ * With `editId`, that user message and everything after it are replaced (server truncates the thread).
+ */
+export async function sendCoachMessage(text: string, onDataChanged: () => void, editId?: string): Promise<void> {
   const msg = text.trim();
   if (!msg || state.busy) return;
   void IOSFeedbackManager.lightImpact();
+  const uid = `u-${Date.now()}`;
   const aid = `a-${Date.now()}`;
-  setState((s) => ({
-    busy: true,
-    messages: [...s.messages, { id: `u-${Date.now()}`, role: "user", content: msg }, { id: aid, role: "assistant", content: "", streaming: true, status: "Thinking…" }],
-  }));
+  setState((s) => {
+    const keep = editId ? s.messages.slice(0, Math.max(0, s.messages.findIndex((m) => m.id === editId))) : s.messages;
+    return {
+      busy: true,
+      messages: [...keep, { id: uid, role: "user", content: msg, pending: true }, { id: aid, role: "assistant", content: "", streaming: true, status: "Thinking…" }],
+    };
+  });
+  controller = new AbortController();
   let committed = "";
   let draft = "";
-  const update = (patch: Partial<CoachMessage>) => setState((s) => ({ messages: s.messages.map((m) => (m.id === aid ? { ...m, ...patch } : m)) }));
+  const update = (patch: Partial<CoachMessage>, id = aid) => setState((s) => ({ messages: s.messages.map((m) => (m.id === id ? { ...m, ...patch } : m)) }));
   const render = () => update({ content: (committed + (committed && draft ? "\n\n" : "") + draft).trim() });
   try {
     const res = await fetch(apiUrl("/api/coach/chat"), {
       method: "POST",
       headers: await authHeaders(true),
-      body: JSON.stringify({ message: msg, threadId: state.threadId }),
+      body: JSON.stringify({ message: msg, threadId: state.threadId, editMessageId: editId }),
+      signal: controller.signal,
     });
     if (!res.ok || !res.body) {
       const body = await res.json().catch(() => null);
@@ -112,7 +131,7 @@ export async function sendCoachMessage(text: string, onDataChanged: () => void):
       buf = lines.pop() ?? "";
       for (const line of lines) {
         if (!line.startsWith("data: ")) continue;
-        let ev: { type: string; content?: string; status?: string; threadId?: string; changedData?: boolean };
+        let ev: { type: string; content?: string; status?: string; threadId?: string; id?: string; changedData?: boolean };
         try {
           ev = JSON.parse(line.slice(6));
         } catch {
@@ -121,6 +140,9 @@ export async function sendCoachMessage(text: string, onDataChanged: () => void):
         switch (ev.type) {
           case "thread":
             if (ev.threadId) setState({ threadId: ev.threadId });
+            break;
+          case "user_message":
+            if (ev.id) update({ id: ev.id, pending: false }, uid);
             break;
           case "token":
             draft += ev.content ?? "";
@@ -155,9 +177,16 @@ export async function sendCoachMessage(text: string, onDataChanged: () => void):
     if (changed) onDataChanged();
     void IOSFeedbackManager.successNotification();
   } catch (err) {
-    update({ streaming: false, status: null, error: true, content: (committed + draft).trim() || (err as Error).message });
-    void IOSFeedbackManager.errorNotification();
+    if (controller?.signal.aborted) {
+      // Changes the coach already saved (tool calls that finished) are real, so refresh data.
+      update({ streaming: false, status: null, stopped: true, content: (committed + draft).trim() });
+      onDataChanged();
+    } else {
+      update({ streaming: false, status: null, error: true, content: (committed + draft).trim() || (err as Error).message });
+      void IOSFeedbackManager.errorNotification();
+    }
   } finally {
+    controller = null;
     setState({ busy: false });
   }
 }

@@ -303,6 +303,17 @@ export async function appendThreadMessage(row: typeof coachMessages.$inferInsert
   return m;
 }
 
+/** Delete a visible user message and everything after it in its thread (message edit). */
+export async function truncateThreadFrom(threadId: string, messageId: string): Promise<void> {
+  const [m] = await db
+    .select()
+    .from(coachMessages)
+    .where(and(eq(coachMessages.threadId, threadId), eq(coachMessages.id, messageId)))
+    .limit(1);
+  if (!m || m.role !== "user" || !m.visible) throw new Error("Message can't be edited");
+  await db.delete(coachMessages).where(and(eq(coachMessages.threadId, threadId), gte(coachMessages.createdAt, m.createdAt)));
+}
+
 export async function renameThread(threadId: string, title: string) {
   await db.update(coachThreads).set({ title }).where(eq(coachThreads.id, threadId));
 }

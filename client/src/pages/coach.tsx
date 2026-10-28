@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowUp, Loader2, SquarePen, Sparkles, CalendarRange, BatteryLow, Gauge, Flag, Activity, History } from "lucide-react";
+import { ArrowUp, Loader2, SquarePen, Sparkles, CalendarRange, BatteryLow, Gauge, Flag, Activity, History, Square, Pencil } from "lucide-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useProfile } from "@/lib/vista";
 import { IOSFeedbackManager } from "@/lib/ios-utils";
-import { useCoachStore, loadCoachHistory, sendCoachMessage, startNewCoachThread, openCoachThread, type CoachMessage } from "@/lib/coach-store";
+import { useCoachStore, loadCoachHistory, sendCoachMessage, startNewCoachThread, openCoachThread, stopCoachReply, type CoachMessage } from "@/lib/coach-store";
 import { Sheet } from "@/components/kit";
 import { fmtDate, timeAgo } from "@/lib/vista";
 import type { Dashboard } from "@/lib/types";
@@ -46,11 +46,14 @@ export default function CoachPage() {
     scrollDown();
   }, [messages, scrollDown]);
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const lastUserId = [...messages].reverse().find((m) => m.role === "user")?.id;
   const send = useCallback(
-    (text: string) => {
+    (text: string, editId?: string) => {
       if (!text.trim() || busy) return;
-      setInput("");
-      void sendCoachMessage(text, () => void qc.invalidateQueries());
+      if (!editId) setInput("");
+      setEditingId(null);
+      void sendCoachMessage(text, () => void qc.invalidateQueries(), editId);
     },
     [busy, qc],
   );
@@ -127,9 +130,18 @@ export default function CoachPage() {
           </div>
         ) : (
           <div className="space-y-4 py-3">
-            {messages.map((m) => (
-              <Bubble key={m.id} m={m} />
-            ))}
+            {messages.map((m) =>
+              m.role === "user" && editingId === m.id ? (
+                <EditBubble key={m.id} initial={m.content} onCancel={() => setEditingId(null)} onSave={(t) => send(t, m.id)} />
+              ) : (
+                <Bubble
+                  key={m.id}
+                  m={m}
+                  isLastUser={m.id === lastUserId}
+                  onEdit={m.role === "user" && !busy && !m.pending ? () => setEditingId(m.id) : undefined}
+                />
+              ),
+            )}
           </div>
         )}
         <div ref={endRef} className="h-2" />
@@ -152,25 +164,41 @@ export default function CoachPage() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
+              // Return adds a new line (like iMessage); the button sends. ⌘/Ctrl+Return sends on a keyboard.
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
                 send(input);
               }
             }}
+            enterKeyHint="enter"
             rows={1}
             placeholder="Message your coach"
             className="max-h-32 min-h-[36px] flex-1 resize-none bg-transparent py-2 text-[16px] leading-snug text-ink-1 outline-none placeholder:text-ink-3"
             style={{ fieldSizing: "content" } as React.CSSProperties}
           />
-          <button
-            type="button"
-            onClick={() => send(input)}
-            disabled={!input.trim() || busy}
-            className="press flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-white disabled:bg-white/[0.12] disabled:text-ink-3"
-            aria-label="Send"
-          >
-            {busy ? <Loader2 size={17} className="animate-spin" /> : <ArrowUp size={18} strokeWidth={2.5} />}
-          </button>
+          {busy ? (
+            <button
+              type="button"
+              onClick={() => {
+                void IOSFeedbackManager.mediumImpact();
+                stopCoachReply();
+              }}
+              className="press flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-black"
+              aria-label="Stop"
+            >
+              <Square size={13} fill="currentColor" strokeWidth={0} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => send(input)}
+              disabled={!input.trim()}
+              className="press flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-white disabled:bg-white/[0.12] disabled:text-ink-3"
+              aria-label="Send"
+            >
+              <ArrowUp size={18} strokeWidth={2.5} />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -214,11 +242,46 @@ function HistorySheet({ open, currentId, onClose, onPick }: { open: boolean; cur
   );
 }
 
-function Bubble({ m }: { m: CoachMessage }) {
+function EditBubble({ initial, onCancel, onSave }: { initial: string; onCancel: () => void; onSave: (text: string) => void }) {
+  const [text, setText] = useState(initial);
+  return (
+    <div className="ml-auto w-[90%] rounded-[20px] border border-primary/60 bg-[#111113] p-3">
+      <textarea
+        autoFocus
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        className="w-full resize-none bg-transparent text-[15px] leading-snug text-ink-1 outline-none"
+        style={{ fieldSizing: "content", minHeight: 44 } as React.CSSProperties}
+      />
+      <div className="mt-2 flex items-center justify-end gap-2">
+        <span className="mr-auto text-[11px] text-ink-3">Replies after this message will be replaced</span>
+        <button type="button" onClick={onCancel} className="press rounded-full px-3 py-1.5 text-[13px] font-medium text-ink-2">
+          Cancel
+        </button>
+        <button type="button" onClick={() => onSave(text)} disabled={!text.trim() || text.trim() === initial.trim()} className="press rounded-full bg-primary px-3.5 py-1.5 text-[13px] font-semibold text-white disabled:opacity-40">
+          Send
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Bubble({ m, onEdit, isLastUser }: { m: CoachMessage; onEdit?: () => void; isLastUser?: boolean }) {
+  const [revealed, setRevealed] = useState(false);
   if (m.role === "user") {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] whitespace-pre-wrap rounded-[20px] rounded-br-md bg-primary px-4 py-2.5 text-[15px] leading-snug text-white">{m.content}</div>
+      <div className="flex flex-col items-end">
+        <div
+          onClick={() => setRevealed((v) => !v)}
+          className="max-w-[85%] whitespace-pre-wrap rounded-[20px] rounded-br-md bg-primary px-4 py-2.5 text-[15px] leading-snug text-white"
+        >
+          {m.content}
+        </div>
+        {onEdit && (isLastUser || revealed) && (
+          <button type="button" onClick={onEdit} className="press mt-1 flex items-center gap-1 px-1 text-[12px] text-ink-3" aria-label="Edit message">
+            <Pencil size={11} /> Edit
+          </button>
+        )}
       </div>
     );
   }
@@ -233,6 +296,7 @@ function Bubble({ m }: { m: CoachMessage }) {
           <span className="line-clamp-2">{m.status}</span>
         </div>
       )}
+      {m.stopped && <div className="mb-1 text-[12px] text-ink-3">Stopped</div>}
       {m.content && (
         <div className={`coach-md text-[15px] leading-relaxed ${m.error ? "text-bad" : "text-ink-2"}`}>
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>

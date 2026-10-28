@@ -16,6 +16,7 @@ import {
 } from "@shared/physiology";
 import { sessionFueling, raceFueling, fuelingLine, formatRange, intensityFromTss, type FuelingProfile, type FuelingTarget } from "@shared/fueling";
 import { COACH_MEMORY_CATEGORIES } from "@shared/schema";
+import { paceMath, PaceMathError } from "@shared/pace-math";
 import { describeWorkout, structureToDsl, WorkoutParseError, isValidStructure, type WorkoutStructure } from "@shared/workout-structure";
 import { addDays } from "@shared/training-load";
 import { WEEKLY_HOURS_BUCKETS } from "@shared/weekly-hours-bucket";
@@ -533,6 +534,28 @@ const getFueling = defineTool({
   },
 });
 
+const paceCalc = defineTool({
+  name: "pace_calculator",
+  description:
+    "Exact pace/split/distance/speed math. ALWAYS use this instead of computing in your head — rep split times, pace unit conversions (/mi ↔ /km, /100yd ↔ /100m), track lap times, finish times, distance conversions (mi/km/m/yd), speed ↔ pace. Give any combination: pace + distance → split time; time + distance → pace; pace + time → distance; pace or speed alone → converted; distance alone → converted.",
+  schema: z.object({
+    pace: z.string().optional().describe('m:ss with unit, e.g. "5:40/mi", "3:31/km", "1:34/100yd"'),
+    time: z.string().optional().describe('m:ss or h:mm:ss, e.g. "3:30", "1:45:30"'),
+    distance: z.string().optional().describe('number + unit, e.g. "1km", "400m", "1mi", "100yd", "26.2mi"'),
+    speed_kmh: z.number().positive().optional(),
+    speed_mph: z.number().positive().optional(),
+  }),
+  status: "Calculating…",
+  run: async (i) => {
+    try {
+      return paceMath(i);
+    } catch (e) {
+      if (e instanceof PaceMathError) return `ERROR: ${e.message}`;
+      throw e;
+    }
+  },
+});
+
 const sync = defineTool({
   name: "sync_activities",
   description: "Pull the latest activities from Strava (covers Garmin/COROS/Wahoo/Apple Watch via their Strava sync). Use when the athlete says a workout is missing.",
@@ -563,6 +586,7 @@ export const COACH_TOOLS = [
   remember,
   forget,
   getFueling,
+  paceCalc,
   sync,
 ] as CoachTool<z.ZodType>[];
 
