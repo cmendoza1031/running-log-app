@@ -23,7 +23,7 @@ import {
 import { isValidStructure, describeWorkout, type WorkoutStructure } from "@shared/workout-structure";
 import { addDays, daysBetween } from "@shared/training-load";
 import { storage } from "../storage";
-import { getActivity, getActivitiesBetween, getPlanWorkout, getThresholds, patchActivity, prefsFromProfile, todayInTz, type AthletePrefs } from "../data";
+import { getActivity, getActivitiesBetween, getPlanWorkout, getPlanWorkoutsBetween, getThresholds, patchActivity, prefsFromProfile, todayInTz, type AthletePrefs } from "../data";
 import { getFitness } from "../analytics/load";
 import { getWellness, wellnessText } from "../analytics/wellness";
 import { logAiUsage } from "../analytics/ai-usage";
@@ -163,12 +163,24 @@ export async function analyzeActivity(userId: string, activityId: string): Promi
     );
   }
 
-  let plannedText = "No planned workout for this session (unstructured).";
-  if (planned) {
-    const structure = isValidStructure(planned.structure) ? (planned.structure as WorkoutStructure) : null;
-    plannedText = `Planned: "${planned.title}" (${planned.phase ?? ""} phase${planned.isKey ? ", key session" : ""}). ${
-      structure ? `Structure: ${describeWorkout(structure, th, prefs)}.` : planned.description ?? ""
-    } Planned duration ${formatDuration(planned.plannedDurationSec ?? 0)}, planned load ${Math.round(planned.plannedTss ?? 0)} TSS.`;
+  const describePlanned = (w: PlanWorkout) => {
+    const structure = isValidStructure(w.structure) ? (w.structure as WorkoutStructure) : null;
+    return `"${w.title}" (${w.sport ?? ""}, ${w.phase ?? ""} phase${w.isKey ? ", key session" : ""}). ${
+      structure ? `Structure: ${describeWorkout(structure, th, prefs)}.` : w.description ?? ""
+    } Planned duration ${formatDuration(w.plannedDurationSec ?? 0)}, planned load ${Math.round(w.plannedTss ?? 0)} TSS.`;
+  };
+  let plannedText: string;
+  if (planned) plannedText = `Planned: ${describePlanned(planned)}`;
+  else {
+    // Not linked: still show the plan around this day, so a session done "off script" or moved a day is judged against it.
+    const nearby = (await getPlanWorkoutsBetween(userId, addDays(run.date, -1), addDays(run.date, 1))).filter(
+      (w) => w.status !== "skipped" && (w.date === run.date || !w.isCompleted),
+    );
+    plannedText = nearby.length
+      ? `This file is not linked to a planned workout. Planned workouts around ${run.date}:\n${nearby
+          .map((w) => `- ${w.date}${w.date === run.date ? " (same day)" : ""}${w.isCompleted ? " [already linked to another file]" : ""}: ${describePlanned(w)}`)
+          .join("\n")}\nIf what the athlete did resembles one of these (same sport and a similar main set, even with changed reps, pace, length or day), treat it as that session done with changes: name it, say what matched and what differed, and don't call it unplanned. This applies even when it is already linked to another file (that file may have been a short shakeout). Call it an extra unplanned session only if it resembles none of them.`
+      : "No planned workout for this day (unstructured).";
   }
 
   // A session saved as several files: show all of them so the note judges the whole session.
@@ -177,7 +189,7 @@ export async function analyzeActivity(userId: string, activityId: string): Promi
   if (group.length > 1) {
     const main = mainFile(group);
     groupText = `\n\nThis session was saved as ${group.length} separate files (same sport, back to back). Judge the planned session using ALL of them; this note is for the file marked THIS FILE. If THIS FILE is a warm-up or cool-down segment, say so briefly and comment on the session as a whole — never call the session skipped or unplanned because the main set is in another file. Don't write the labels THIS FILE or MAIN SET FILE in the note; say "this warm-up", "the main set" etc.\n${group
-      .map((r) => `- ${r.startTime ? r.startTime.toISOString().slice(11, 16) + " UTC" : ""} ${r.id === run.id ? "[THIS FILE] " : ""}${r.id === main.id ? "[MAIN SET FILE] " : ""}${activityLine(r, prefs)}`)
+      .map((r) => `- ${r.startTime ? r.startTime.toISOString().slice(11, 16) + " UTC" : ""} ${r.id === run.id ? "[THIS FILE] " : ""}${r.id === main.id ? "[MAIN SET FILE] " : ""}${activityLine({ ...r, analysis: null }, prefs)}`)
       .join("\n")}`;
   }
 
